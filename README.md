@@ -1,67 +1,78 @@
-# 星耀季节 Mod 合集
+# Starlit Season Mod Pack
 
-《偶像大师 星耀季节》（THE IDOLM@STER STARLIT SEASON）的 Mod 合集，带一个开关管理器。
+English | [中文](README_zh.md)
 
-适用于 **Windows / Steam 版 v1.61**。
+A small mod pack for THE IDOLM@STER STARLIT SEASON with a switch-board manager.
 
-| Mod | 作用 |
+For **Windows / Steam version 1.61**.
+
+| Mod | What it does |
 | --- | --- |
-| 对话自动 / 手动切换 | 对话中按 手柄 Y / △ 或键盘 A 切换自动播放，状态显示在原生提示栏。由 [独立仓库](https://github.com/AlphaBoom/starlit-season-text-auto-toggle) 维护。 |
-| 对话存读档增强 | 对话菜单增加 セーブする / ロードする；独立的 QUICK 存档位（AUTO 下方）；F5 快存、F6 快读。详见 [说明](mods/DialogueMenu/README.md)。 |
-| DLC 解锁 | 使用 [SmokeAPI](https://github.com/acidicoala/SmokeAPI) 4.1.3。 |
+| Dialogue auto / manual toggle | Press gamepad Y / Triangle or keyboard A in a dialogue to switch auto-advance; the state shows in the game's own guide bar. Maintained in [its own repository](https://github.com/AlphaBoom/starlit-season-text-auto-toggle). |
+| Save / load in dialogue | SAVE / LOAD in the dialogue menu, a separate QUICK save slot under AUTO, F5 quick save and F6 quick load. See [details](mods/DialogueMenu/README.md). |
+| DLC unlock (off by default) | Uses [SmokeAPI](https://github.com/acidicoala/SmokeAPI) 4.1.3. Turn it on in the manager. |
 
-## 功能一览
+## Features
 
-**对话菜单里的存读档。** 对话中按 Esc（手柄菜单键）打开的原生菜单，在「戻る」上方多了 セーブする / ロードする，
-直接进入游戏原生的存档 / 读档界面，返回后回到菜单。
+**Save and load from the dialogue menu.** The game's dialogue menu (Esc / gamepad menu button) gets SAVE and LOAD
+above 戻る (Back). They open the game's own save / load screens, and the menu is left exactly as it was when you return.
+A save made during a dialogue stores the latest saveable point (the checkpoint taken when the dialogue started,
+for example FREE TIME), not the previous phase.
 
-![对话菜单中的 セーブする / ロードする](docs/images/pause-menu.jpg)
+![SAVE / LOAD in the dialogue menu](docs/images/pause-menu.jpg)
 
-**独立的 QUICK 存档位。** QUICK 位在 AUTO 下方，和 AUTO、Slot 01–15 互不覆盖。对话中 **F5** 直接存到 QUICK，
-**F6** 直接读取 QUICK。标题画面的 LOAD、游戏内的存读档界面也能看到并手动使用它。
+**A separate QUICK slot.** QUICK sits right below AUTO and never overwrites AUTO or slots 01–15.
+In a dialogue, **F5** saves to QUICK and **F6** loads QUICK (also while the menu is open).
+QUICK also appears on the title screen's LOAD and on the game's other save / load screens.
 
-![读档界面：AUTO 下方的 QUICK 存档位](docs/images/quick-slot.jpg)
+![Load screen: the QUICK slot below AUTO](docs/images/quick-slot.jpg)
 
-**对话自动 / 手动切换。** 键盘 A、手柄 Y / △ 切换，提示栏的图标跟随当前使用的设备（下图为键盘）。
+**Dialogue auto / manual toggle.** Keyboard A or gamepad Y / Triangle; the icon follows the device you use
+(keyboard shown below).
 
-![提示栏中的 A AUTO ON](docs/images/auto-keyboard.jpg)
+![A AUTO ON in the guide bar](docs/images/auto-keyboard.jpg)
 
-**Mod 管理器。** 点卡片切换开关，点「应用」生效；「卸载全部 Mod」恢复原版。
+**Mod manager.** Click a card to switch a mod, press Apply; "Uninstall all" restores the original game.
+The button at the top right switches between English and Chinese.
 
 ![StarlitMods.exe](docs/images/manager.png)
 
-## 安装
+## Install
 
-1. **关闭游戏**。在 Steam 中右键游戏 → **管理 → 浏览本地文件**，打开游戏根目录（有 `StarlitSeason.exe` 的文件夹）。
-2. 从 [Releases](https://github.com/AlphaBoom/starlit-season-mods/releases/latest) 下载 `StarlitSeasonMods-版本号.zip`，
-   **解压到这个文件夹**（提示覆盖时选“是”）。
-3. 双击 **`StarlitMods.exe`**。首次打开会自动启用全部功能（对话自动切换、存读档增强、DLC 解锁）。
-4. 从 Steam 正常启动游戏。
+1. **Close the game.** In Steam, right-click the game → **Manage → Browse local files** to open the game folder
+   (the one containing `StarlitSeason.exe`).
+2. Download `StarlitSeasonMods-<version>.zip` from [Releases](https://github.com/AlphaBoom/starlit-season-mods/releases/latest)
+   and **extract it into that folder** (choose "replace" when asked).
+3. Start the game from Steam. The dialogue toggle and save / load mods work right after extracting.
 
-解压后对话自动切换和存读档增强已经生效；DLC 解锁需要第 3 步，因为它要先备份游戏原有的 Steam API 文件。
+For DLC unlock, double-click **`StarlitMods.exe`**, turn on "DLC unlock" and press **Apply**.
+The manager backs up the game's own Steam API file first.
 
-## 开关与卸载
+## Switch mods / uninstall
 
-- 打开 **`StarlitMods.exe`**，勾选 / 取消功能后点 **应用**。下次启动游戏生效。
-- 点 **卸载全部 Mod**：移除本包安装的 Mod 和加载器，恢复原有 Steam API。存档会保留（QUICK 存档也在存档文件里）。
-  之后可以删除 `StarlitMods.exe` 和 `StarlitModsData` 文件夹。
+- Open **`StarlitMods.exe`**, click the cards to switch mods, then press **Apply**. Changes apply the next time the game starts.
+- **Uninstall all** removes the mods and the loader installed by this pack and restores the original Steam API.
+  Saves are kept (the QUICK slot lives in the save file too). You can then delete `StarlitMods.exe` and the
+  `StarlitModsData` folder.
 
-更新时下载新版本，解压覆盖后再打开一次 `StarlitMods.exe` 点 **应用**。
+To update, extract the new zip over the old one. If DLC unlock is on, open `StarlitMods.exe` once more and press **Apply**.
 
-如果 Steam“验证游戏文件完整性”恢复了 Steam API，DLC 解锁会显示为关闭，重新勾选并应用即可。
+If Steam's "Verify integrity of game files" restores the Steam API, DLC unlock shows as off; turn it on and apply again.
 
-## 构建
+## Build
 
-Release 由 GitHub Actions（`.github/workflows/release.yml`）在推送 `v*` 标签时构建，本地也可以运行：
+GitHub Actions (`.github/workflows/release.yml`) builds and publishes the release when a `v*` tag is pushed.
+To build locally:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build.ps1 -Version 1.0.0
 ```
 
-依赖都固定版本并校验 SHA-256（`deps.json`）：UE4SS 3.0.1-1170（镜像在本仓库的 `deps-ue4ss-3.0.1-1170` Release，
-上游 `experimental-latest` 已不再提供该文件）、SmokeAPI 4.1.3、对话自动切换仓库的固定提交、Zig 编译器（编译存读档 Mod 的原生 DLL）。
+All dependencies are pinned and checked by SHA-256 in `deps.json`: UE4SS 3.0.1-1170 (mirrored in this repository's
+`deps-ue4ss-3.0.1-1170` release, since upstream `experimental-latest` no longer has it), SmokeAPI 4.1.3,
+a pinned commit of the dialogue toggle repository, and the Zig compiler (builds the save / load mod's native DLL).
 
 ---
 
-本仓库代码采用 [MIT 许可](LICENSE)。UE4SS 为 MIT 许可，SmokeAPI 为 Unlicense，许可文件随包附在 `StarlitModsData/licenses`。
-游戏内容版权归游戏权利人所有。
+Code in this repository is [MIT licensed](LICENSE). UE4SS is MIT licensed and SmokeAPI uses The Unlicense; their
+license files ship in `StarlitModsData/licenses`. Game content belongs to its rights holders.

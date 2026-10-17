@@ -1,10 +1,11 @@
 -- Starlit Season Steam v1.61. Unreal calls stay on the game thread.
 local QUICK=16 -- extra save slot "slotQuick", shown directly below AUTO; used by F5 / F6.
-local LABELS={'セーブする','ロードする'}
+local LABELS={'SAVE','LOAD'} -- English: no localisation needed
 local directory=debug.getinfo(1,'S').source:gsub('^@',''):match('^(.*[/\\])')
 local function native(name)return assert(package.loadlib(directory..'../DialogueMenu.dll',name))end
-local openMenu,resume=native('MenuOpen'),native('MenuResume')
+local openMenu,resume,repause,setInput=native('MenuOpen'),native('MenuResume'),native('MenuRepause'),native('MenuInput')
 local slotsExtend,slotAppend,slotSetup=native('SlotsExtend'),native('SlotAppend'),native('SlotSetup')
+local saveBegin,saveFix=native('DialogueSaveBegin'),native('DialogueSaveFix')
 local gameplay=StaticFindObject('/Script/Engine.GameplayStatics'):GetCDO()
 local widgets=StaticFindObject('/Script/UMG.WidgetBlueprintLibrary'):GetCDO()
 local function log(s)print('[DialogueMenu] '..s..'\n')end
@@ -14,7 +15,7 @@ local function prop(class,name,offset,kind)
 end
 prop('CommuScriptPause','DMPaused',0x230)
 for _,p in ipairs({{'DMCursor',0x378},{'DMBusy',0x379},{'DMLog',0x37a}})do prop('WidgetCommuScriptPause',p[1],p[2])end
-prop('WidgetSaveLoad','DMBusy',0x500)
+prop('WidgetSaveLoad','DMSaving',0x500)
 prop('WidgetSaveLoad','DMReady',0x551)
 prop('WidgetSaveLoad','DMFlag',0x555)
 prop('WidgetSaveLoad','DMColumn',0x558,PropertyTypes.IntProperty)
@@ -76,12 +77,28 @@ local function extend(w)
  log('Added SAVE / LOAD to pause menu')
  return info
 end
+-- Cursor sound: the game's static PlaySE helper (WidgetCostumeGet::PlaySE ignores
+-- its instance), with the system move sound the save/load screen uses.
+local soundLib=StaticFindObject('/Script/imal.WidgetCostumeGet')
+soundLib=soundLib and soundLib:IsValid()and soundLib:GetCDO()
+local moveSE=nil
+local function learnSE(w)
+ if not moveSE and valid(w)then local id=w.SE_Move:ToString();if id~=''then moveSE=id;log('Move sound '..id)end end
+end
+local function playMove()
+ if not moveSE then
+  local cdo=StaticFindObject('/Game/Widget/System/WBP_SaveLoad.Default__WBP_SaveLoad_C')
+  if valid(cdo)then learnSE(cdo)end
+ end
+ if soundLib and moveSE then pcall(function()soundLib:PlaySE(moveSE)end)end
+end
 local function nativeButton(w,i)
  if w._ButtonList:Contains(i)then return w._ButtonList:Find(i):get()end
 end
-local function select(n)
+local function select(n,quiet)
  local w=current;local info=installed[w:GetAddress()]
  for i,b in ipairs(info.buttons)do if valid(b)then b:SetSelect(i==n)end end
+ if n and n~=sel and not quiet then playMove()end
  if n then
   local b=info.buttons[n];if valid(b)then b:PlaySelectAnimation()end
   local cur=nativeButton(w,w.DMCursor);if valid(cur)then cur:SetSelect(false)end
@@ -89,7 +106,7 @@ local function select(n)
  sel=n
 end
 local function restoreNative()
- local w=current;select(nil)
+ local w=current;select(nil);playMove()
  local cur=nativeButton(w,w.DMCursor);if valid(cur)then cur:SetSelect(true);cur:PlaySelectAnimation()end
 end
 local function menuReady()
@@ -156,6 +173,87 @@ local function findNamed(o,name,class)
  end
  walk(o);return found
 end
+-- QUICK row colour. Slate tints only darken (clamped to 1) and the row texture
+-- holds both the teal header and the white body, so: keep the normal row, and
+-- overlay its header band with the game's neutral grey row image tinted violet,
+-- clipped to the header height.
+local QUICK_TINT={R=0.74,G=0.58,B=1.0,A=1.0}
+-- Overlay boxes as row fractions {x0,y0,x1,y1,opacity,header}. Header boxes cover
+-- exactly the slot's teal band (0.14..0.56 of the row) at full strength up to the slant,
+-- then strips that fade out like the teal-to-cream gradient (amount ~ (1-u)^1.4).
+-- The grey row's band is slightly shorter (0.168..0.531), so header boxes stretch the
+-- grey image to fit. The badge column keeps the grey image unscaled.
+local BAND0,BAND1=0.14,0.57
+local GREY0,GREY1=0.168,0.531
+local BOXES={{0,BAND0,0.35,BAND1,1,true},{0,0,0.062,0.76,1,false},
+ -- the badge's slanted top-right corner, as four steps
+ {0.062,0.042,0.064,BAND0,1,false},{0.064,0.063,0.066,BAND0,1,false},
+ {0.066,0.084,0.0685,BAND0,1,false},{0.0685,0.105,0.0706,BAND0,1,false}}
+do
+ local x0,n=0.35,32
+ for k=0,n-1 do
+  local a,b=x0+(1-x0)*k/n,x0+(1-x0)*(k+1)/n
+  local u=((a+b)/2-0.283)/0.717
+  BOXES[#BOXES+1]={a,BAND0,b,BAND1,(1-u)^1.4,true}
+ end
+end
+local function tint(q)
+ if not valid(q)then return end
+ local style=findNamed(q,'WidgetSwitcher_clear')
+ if not valid(style)then return end
+ local grey=findNamed(style,'Image_14')
+ if not valid(grey)then return end
+ for _,n in ipairs({'Normal','Clear'})do
+  local panel=findNamed(style,n)
+  if valid(panel)and not _G['DMOv'..panel:GetAddress()]then
+   _G['DMOv'..panel:GetAddress()]=true
+   local base;for j=0,panel:GetChildrenCount()-1 do local c=panel:GetChildAt(j);if c:IsA('/Script/UMG.Image')then base=c break end end
+   if valid(base)then
+    -- Build the overlay first; the panel is only rebuilt once every widget exists.
+    local tree=panel:GetOuter()
+    local made={}
+    if not valid(canvasClass)then canvasClass=StaticFindObject('/Script/UMG.CanvasPanel')end
+    if not valid(imageClass)then imageClass=StaticFindObject('/Script/UMG.Image')end
+    local ok,err=pcall(function()
+     for i=1,#BOXES do
+      local clip=StaticConstructObject(canvasClass,tree)
+      local img=StaticConstructObject(imageClass,tree)
+      if not valid(clip)or not valid(img)then error('construct failed')end
+      made[i]={clip,img}
+     end
+    end)
+    if not ok then log('QUICK overlay skipped: '..tostring(err))return end
+    -- Rebuild child order: background, overlay, then the rest (icons, tags).
+    local kids={}
+    for j=0,panel:GetChildrenCount()-1 do local c=panel:GetChildAt(j);local sl=c.Slot
+     kids[#kids+1]={w=c,a=sl:GetAnchors(),al=sl:GetAlignment(),p=sl:GetPosition(),s=sl:GetSize(),z=sl:GetZOrder(),auto=sl:GetAutoSize()}end
+    q:ForceLayoutPrepass()
+    local b=kids[1]
+    -- The background spans the row (left/top offset, right margin, fixed height).
+    local W=q:GetDesiredSize().X-b.p.X-b.s.X
+    local H=b.s.Y
+    panel:ClearChildren()
+    local function put(k)local sl=panel:AddChildToCanvas(k.w);sl:SetAnchors(k.a);sl:SetAlignment(k.al);sl:SetPosition(k.p);sl:SetSize(k.s);sl:SetZOrder(k.z);sl:SetAutoSize(k.auto)end
+    put(kids[1])
+    for i,box in ipairs(BOXES)do
+     local clip,img=made[i][1],made[i][2]
+     img:SetBrush(grey.Brush);img:SetColorAndOpacity(QUICK_TINT)
+     clip.Clipping=1;clip:SetVisibility(4);img:SetVisibility(4);clip:SetRenderOpacity(box[5])
+     local cs=panel:AddChildToCanvas(clip)
+     cs:SetAnchors({Minimum={X=0,Y=0},Maximum={X=0,Y=0}});cs:SetZOrder(b.z)
+     cs:SetPosition({X=b.p.X+W*box[1],Y=b.p.Y+H*box[2]});cs:SetSize({X=W*(box[3]-box[1]),Y=H*(box[4]-box[2])})
+     local is=clip:AddChildToCanvas(img)
+     is:SetAnchors({Minimum={X=0,Y=0},Maximum={X=0,Y=0}})
+     local scale,top=1,0
+     if box[6]then scale=(BAND1-BAND0)/(GREY1-GREY0);top=BAND0-GREY0*scale end
+     is:SetPosition({X=-W*box[1],Y=H*(top-box[2])});is:SetSize({X=W,Y=H*scale})
+    end
+    for i=2,#kids do put(kids[i])end
+    log(string.format('QUICK overlay %s %.0fx%.0f',n,W,H))
+   end
+  end
+ end
+end
 local function label(q)
  for name,text in pairs({TextBlock_96='QUICK',text_slot_number='QS'})do
   local t=findNamed(q,name)
@@ -190,7 +288,7 @@ local function attachQuick(w)
  -- Mouse: register the row's hit area under the slot index, like the native rows.
  local hit=findNamed(q.WidgetTree.RootWidget,nil,'/Script/imal.HitAreaWidget')
  if valid(hit)and valid(w.HitAreaChecker)then w.HitAreaChecker:AddHitArea(hit,QUICK)end
- label(q)
+ label(q);tint(q)
  screens[id].quick=q
  log(string.format('Added QUICK slot (%s, column %d, hit %s)',list:GetClass():GetFName():ToString(),w.DMColumn,tostring(valid(hit))))
  return screens[id]
@@ -211,7 +309,7 @@ for _,dir in ipairs({'Down','Up'})do
  RegisterHook('/Script/imal.WidgetSaveLoad:OnMove'..dir,function(self)
   local w=self:get()
   local info=screens[w:GetAddress()]
-  if info and info.quick and w.DMReady~=0 and w.DMBusy==0 then blocked[w:GetAddress()]=true;w.DMReady=0 end
+  if info and info.quick and w.DMReady~=0 and w.DMSaving==0 then blocked[w:GetAddress()]=true;w.DMReady=0 end
  end,function(self)
   local w=self:get()
   if blocked[w:GetAddress()]then
@@ -244,18 +342,24 @@ local function quickStep(s)
 end
 
 local function open(request)
- if session then return end
- local parser=activeParser();if not valid(parser)then return end
- local pause=parser.CommuScriptPause;if not valid(pause)then return end
- if not request.fromPause and pause.DMPaused~=0 then return end
+ if session then log('Ignored: save/load screen already open')return end
+ local parser=activeParser();if not valid(parser)then log('Ignored: no active dialogue')return end
+ local pause=parser.CommuScriptPause;if not valid(pause)then log('Ignored: no dialogue pause')return end
+ if not request.fromPause and pause.DMPaused~=0 then
+  -- F5 / F6 from the open dialogue menu: run over the menu and come back to it.
+  if menuReady()then request.fromPause=true else log('Ignored: dialogue busy')return end
+ end
  if request.quick and not quickReady then return end
+ -- Saves made from a dialogue are rewritten from the AUTO save (see DialogueSaveFix).
+ local fixing=false
+ if request.mode==0 then fixing=saveBegin()==1 end
  local addr=openMenu(pause:GetAddress(),request.mode)
  if not addr or addr<=0 then error('Native initialization rejected: '..tostring(addr))end
  local w
  for _,candidate in ipairs(FindAllOf('WidgetSaveLoad')or{})do if valid(candidate)and candidate:GetAddress()==addr then w=candidate;break end end
  if not valid(w)then resume(pause:GetAddress());error('Save/load widget not found')end
  attachQuick(w)
- session={pause=pause,widget=w,parent=request.fromPause and current or nil,mode=request.mode,quick=request.quick,frames=0,step=0,returnSel=sel}
+ session={parser=parser,pause=pause,widget=w,parent=request.fromPause and current or nil,mode=request.mode,quick=request.quick,frames=0,step=0,returnSel=sel,fixing=fixing}
  if valid(session.parent)then select(nil);session.parent:SetVisibility(1)end
  log('Opened '..(request.mode==0 and 'SAVE' or 'LOAD')..(request.quick and ' quick' or ''))
 end
@@ -288,18 +392,43 @@ LoopInGameThreadWithDelay(1,function()
   for _,w in ipairs(watched)do
    if valid(w)then
     local info=screens[w:GetAddress()]
+    learnSE(w)
     if not info then attachQuick(w)
-    elseif valid(info.quick)and w:IsInViewport()then label(info.quick)end
+    elseif valid(info.quick)and w:IsInViewport()then label(info.quick);tint(info.quick)end
    end
   end
   if pending then local request=pending;pending=nil;open(request)end
   if session then
    local s=session;s.frames=s.frames+1
    if s.frames>10 and(not valid(s.widget)or not s.widget:IsInViewport())then
-    if valid(s.parent)and s.parent:IsInViewport()then s.parent:SetVisibility(0);current=s.parent;if s.returnSel then select(s.returnSel)end
-    elseif valid(s.pause)then resume(s.pause:GetAddress())end
+    -- The native load sets the screen's processing flag and never clears it (it travels).
+    if s.mode==1 and valid(s.widget)and s.widget.DMSaving~=0 then s.loading=true end
+    -- The game closes the screen as soon as the save message is dismissed.
+    if s.fixing and valid(s.widget)then local r=saveFix(s.widget:GetAddress());if r>0 then log('Dialogue save resume point: slot '..r)end end
+    if valid(s.parent)and valid(s.pause)and not s.loading then
+     -- Back to the menu exactly as it was: the screen's close path dropped the paused
+     -- state and the dialogue input mode, so restore both; the menu never closes.
+     repause(s.pause:GetAddress());setInput(s.parser:GetAddress(),2)
+     s.parent:SetVisibility(0);current=s.parent
+     if s.returnSel then select(s.returnSel,true)end
+    elseif valid(s.parent)and valid(s.pause)then
+     -- A load was confirmed: the game is travelling to the loaded save; leave the menu.
+     s.parent:SetVisibility(0);resume(s.pause:GetAddress());setInput(s.parser:GetAddress(),1)
+    elseif valid(s.pause)then resume(s.pause:GetAddress());if valid(s.parser)then setInput(s.parser:GetAddress(),1)end end
     session=nil
-   elseif s.quick and s.frames>30 and s.widget.DMReady~=0 then quickStep(s)end
+    if valid(current)then log(string.format('Back in menu: cursor %d busy %d log %d paused %d',current.DMCursor,current.DMBusy,current.DMLog,valid(s.pause)and s.pause.DMPaused or -1))end
+   else
+    if s.mode==1 and s.widget.DMSaving~=0 then s.loading=true end
+    -- After a save completes (screen idle again), store the dialogue's resume point.
+    if s.fixing and valid(s.widget)and s.frames%15==0 and s.widget.DMSaving==0 then
+     local r=saveFix(s.widget:GetAddress())
+     if r>0 then log('Dialogue save resume point: slot '..r)end
+     if r>0 then
+      s.widget.SlotList:ForEach(function(i,e)local c=e:get();if i==(r==QUICK and #s.widget.SlotList or r+1)then slotSetup(c:GetAddress(),r,s.widget.DMFlag)end end)
+     end
+    end
+    if s.quick and s.frames>30 and s.widget.DMReady~=0 then quickStep(s)end
+   end
   end
   if menuReady()then
    local info=installed[current:GetAddress()]

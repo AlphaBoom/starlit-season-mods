@@ -21,6 +21,11 @@ namespace StarlitMods {
   public string Version; public string GameExeSha256; public string SmokeSha256;
   public PackageFile[] Files;
  }
+ // UI language: Chinese on Chinese Windows, English elsewhere; switchable in the window.
+ public static class L {
+  public static bool Zh = System.Globalization.CultureInfo.CurrentUICulture.Name.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
+  public static string T(string zh, string en) { return Zh ? zh : en; }
+ }
  public sealed class Status { public bool Auto, Dialogue, Dlc, Loader, GameMatches; }
 
  public sealed class Manager {
@@ -33,7 +38,7 @@ namespace StarlitMods {
    Root = Path.GetFullPath(root).TrimEnd('\\', '/');
    Bin = Under(Root, "StarlitSeason/Binaries/Win64");
    if (!File.Exists(Under(Bin, "StarlitSeason-Win64-Shipping.exe")))
-    throw new IOException("请把压缩包解压到游戏根目录（含 StarlitSeason.exe 的文件夹），再打开 StarlitMods.exe。\n\n在 Steam 中右键游戏 → 管理 → 浏览本地文件 即可打开该目录。");
+    throw new IOException(L.T("请把压缩包解压到游戏根目录（含 StarlitSeason.exe 的文件夹），再打开 StarlitMods.exe。\n\n在 Steam 中右键游戏 → 管理 → 浏览本地文件 即可打开该目录。", "Extract the package into the game folder (the one with StarlitSeason.exe), then open StarlitMods.exe.\n\nIn Steam: right-click the game > Manage > Browse local files."));
    Data = Under(Root, "StarlitModsData"); Payload = Under(Data, "payload");
    SteamDir = Under(Root, "Engine/Binaries/ThirdParty/Steamworks/Steamv146/Win64");
    Manifest = json.Deserialize<Manifest>(File.ReadAllText(Under(Data, "manifest.json")));
@@ -75,17 +80,17 @@ namespace StarlitMods {
   }
   void EnsureClosed() {
    if (Process.GetProcessesByName("StarlitSeason-Win64-Shipping").Length != 0)
-    throw new IOException("请先关闭游戏，再修改 Mod。");
+    throw new IOException(L.T("请先关闭游戏，再修改 Mod。", "Close the game before changing mods."));
   }
   void EnsureGame() {
    if (!HashIs(Under(Bin, "StarlitSeason-Win64-Shipping.exe"), Manifest.GameExeSha256))
-    throw new IOException("游戏版本与本 Mod 包不匹配（仅支持 Steam v1.61）。未修改任何文件。");
+    throw new IOException(L.T("游戏版本与本 Mod 包不匹配（仅支持 Steam v1.61）。未修改任何文件。", "This game version is not supported (Steam v1.61 only). No files were changed."));
   }
   // Restores any missing or altered package file from the verified payload copy.
   void Deploy() {
    foreach (var f in Manifest.Files) {
     string source = Under(Payload, f.Path);
-    if (!HashIs(source, f.Sha256)) throw new IOException("Mod 包文件损坏或不完整：" + f.Path + "\n请重新解压完整的 Release 压缩包。");
+    if (!HashIs(source, f.Sha256)) throw new IOException(L.T("Mod 包文件损坏或不完整：", "Mod package file missing or damaged: ") + f.Path + L.T("\n请重新解压完整的 Release 压缩包。", "\nExtract the full release zip again."));
     string dest = Under(Root, f.Path);
     if (f.Path.EndsWith("/mods.txt", StringComparison.OrdinalIgnoreCase) && File.Exists(dest)) continue;
     if (HashIs(dest, f.Sha256)) continue;
@@ -97,9 +102,9 @@ namespace StarlitMods {
    bool smoke = HashIs(Api, Manifest.SmokeSha256);
    string config = Under(SteamDir, "SmokeAPI.config.json");
    if (enable) {
-    if (!File.Exists(Api)) throw new IOException("找不到游戏的 steam_api64.dll。");
+    if (!File.Exists(Api)) throw new IOException(L.T("找不到游戏的 steam_api64.dll。", "The game's steam_api64.dll was not found."));
     if (smoke) {
-     if (!File.Exists(ApiOriginal)) throw new IOException("缺少原始 steam_api64_o.dll，无法安全管理 DLC 解锁。请在 Steam 中验证游戏文件完整性后重试。");
+     if (!File.Exists(ApiOriginal)) throw new IOException(L.T("缺少原始 steam_api64_o.dll，无法安全管理 DLC 解锁。请在 Steam 中验证游戏文件完整性后重试。", "The original steam_api64_o.dll is missing, so DLC unlock cannot be managed safely. Verify the game files in Steam and try again."));
     } else {
      // The current file is the game's own Steam API (possibly updated by Steam).
      File.Copy(Api, ApiOriginal, true);
@@ -107,7 +112,7 @@ namespace StarlitMods {
     }
     File.Copy(Under(Payload, "dlc/SmokeAPI.config.json"), config, true);
    } else if (smoke) {
-    if (!File.Exists(ApiOriginal)) throw new IOException("缺少原始 steam_api64_o.dll，无法恢复。请在 Steam 中验证游戏文件完整性。");
+    if (!File.Exists(ApiOriginal)) throw new IOException(L.T("缺少原始 steam_api64_o.dll，无法恢复。请在 Steam 中验证游戏文件完整性。", "The original steam_api64_o.dll is missing and cannot be restored. Verify the game files in Steam."));
     File.Copy(ApiOriginal, Api, true);
     File.Delete(ApiOriginal);
     foreach (string name in new[] { "SmokeAPI.config.json", "SmokeAPI.cache.json", "SmokeAPI.log.log" }) {
@@ -167,35 +172,54 @@ namespace StarlitMods {
   public ManagerForm(Manager m) {
    manager = m;
    using (var g = CreateGraphics()) k = g.DpiX / 96f;
-   Text = "STARLIT SEASON Mod 管理器 " + m.Manifest.Version;
    AutoScaleMode = AutoScaleMode.None;
    ClientSize = new Size(S(760), S(560));
    FormBorderStyle = FormBorderStyle.FixedSingle; MaximizeBox = false;
    StartPosition = FormStartPosition.CenterScreen;
    DoubleBuffered = true;
    Font = new Font("Microsoft YaHei UI", 10);
-   options = new[] {
-    new Option { Title = "对话自动 / 手动切换", Detail = "对话中按 手柄 Y / 三角键 或 键盘 A 切换，提示栏显示 AUTO ON / OFF" },
-    new Option { Title = "对话存读档增强", Detail = "菜单增加 セーブ / ロード · 独立 QUICK 存档位 · F5 快存 / F6 快读" },
-    new Option { Title = "DLC 解锁", Detail = "SmokeAPI 4.1.3 · 关闭时恢复游戏原有的 Steam API" },
-   };
+   string saved = Path.Combine(manager.Data, "language.txt");
+   if (File.Exists(saved)) L.Zh = File.ReadAllText(saved).Trim() == "zh";
+   options = new[] { new Option(), new Option(), new Option() };
    commands = new[] {
-    new Command { Text = "应用", Primary = true, Click = () => Run(() => manager.Apply(options[0].On, options[1].On, options[2].On), "已应用，下次启动游戏生效。") },
-    new Command { Text = "卸载全部 Mod", Click = () => {
-     if (MessageBox.Show(this, "卸载本包安装的全部 Mod 和加载器，并恢复原有 Steam API？\n\n存档（包括 QUICK 存档位）会保留。", "卸载 Mod", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
-      Run(manager.Uninstall, "已卸载。可删除 StarlitMods.exe 和 StarlitModsData 文件夹；重新点“应用”可再次安装。");
+    new Command { Primary = true, Click = () => Run(() => manager.Apply(options[0].On, options[1].On, options[2].On), L.T("已应用，下次启动游戏生效。", "Applied. Takes effect the next time the game starts.")) },
+    new Command { Click = () => {
+     if (MessageBox.Show(this, L.T("卸载本包安装的全部 Mod 和加载器，并恢复原有 Steam API？\n\n存档（包括 QUICK 存档位）会保留。", "Remove every mod and the loader installed by this package, and restore the original Steam API?\n\nSaves (including the QUICK slot) are kept."), L.T("卸载 Mod", "Uninstall mods"), MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+      Run(manager.Uninstall, L.T("已卸载。可删除 StarlitMods.exe 和 StarlitModsData 文件夹；重新点“应用”可再次安装。", "Uninstalled. You can delete StarlitMods.exe and the StarlitModsData folder, or press Apply to reinstall."));
     } },
-    new Command { Text = "打开游戏目录", Click = () => Process.Start("explorer.exe", manager.Root) },
+    new Command { Click = () => Process.Start("explorer.exe", manager.Root) },
+    new Command { Click = () => {
+     L.Zh = !L.Zh;
+     try { File.WriteAllText(saved, L.Zh ? "zh" : "en"); } catch (IOException) { }
+     Texts(); status = Hint(); Invalidate();
+    } },
    };
+   Texts();
    for (int i = 0; i < options.Length; i++) {
     options[i].Card = R(40, 128 + i * 98, 680, 84);
     options[i].Toggle = R(40 + 680 - 24 - 64, 128 + i * 98 + 26, 64, 32);
    }
-   for (int i = 0; i < commands.Length; i++) commands[i].Box = R(52 + i * 226, 432, 204, 50);
+   for (int i = 0; i < 3; i++) commands[i].Box = R(52 + i * 226, 432, 204, 50);
+   commands[3].Box = R(640, 50, 96, 26);
    Shown += (s, e) => {
-    if (manager.FirstRun) Run(() => manager.Apply(true, true, true), "首次运行：已按默认配置启用全部功能。");
-    else Run(() => { }, "点击卡片切换功能，然后点“应用”。修改前请先关闭游戏。");
+    // First run: the two dialogue mods on; DLC unlock stays off until the user enables it.
+    if (manager.FirstRun) Run(() => manager.Apply(true, true, false), L.T("首次运行：已启用对话自动切换和存读档增强。DLC 解锁需要手动开启。", "First run: dialogue auto toggle and save / load enabled. DLC unlock is off until you turn it on."));
+    else Run(() => { }, Hint());
    };
+  }
+  static string Hint() { return L.T("点击卡片切换功能，然后点“应用”。修改前请先关闭游戏。", "Click a card to switch a mod, then press Apply. Close the game first."); }
+  void Texts() {
+   Text = L.T("STARLIT SEASON Mod 管理器 ", "STARLIT SEASON Mod Manager ") + manager.Manifest.Version;
+   options[0].Title = L.T("对话自动 / 手动切换", "Dialogue auto / manual toggle");
+   options[0].Detail = L.T("对话中按 手柄 Y / 三角键 或 键盘 A 切换，提示栏显示 AUTO ON / OFF", "Gamepad Y / Triangle or keyboard A in dialogue; the guide bar shows AUTO ON / OFF");
+   options[1].Title = L.T("对话存读档增强", "Save / load in dialogue");
+   options[1].Detail = L.T("菜单增加 SAVE / LOAD · 独立 QUICK 存档位 · F5 快存 / F6 快读", "SAVE / LOAD in the dialogue menu · separate QUICK slot · F5 quick save / F6 quick load");
+   options[2].Title = L.T("DLC 解锁", "DLC unlock");
+   options[2].Detail = L.T("SmokeAPI 4.1.3 · 默认关闭 · 关闭时恢复游戏原有的 Steam API", "SmokeAPI 4.1.3 · off by default · turning it off restores the game's Steam API");
+   commands[0].Text = L.T("应用", "Apply");
+   commands[1].Text = L.T("卸载全部 Mod", "Uninstall all");
+   commands[2].Text = L.T("打开游戏目录", "Game folder");
+   commands[3].Text = L.T("English", "中文");
   }
   int S(float v) { return (int)Math.Round(v * k); }
   RectangleF R(float x, float y, float w, float h) { return new RectangleF(x * k, y * k, w * k, h * k); }
@@ -203,11 +227,11 @@ namespace StarlitMods {
 
   void Run(Action work, string message) {
    try { work(); status = message; }
-   catch (Exception ex) { status = "操作未完成：" + ex.Message.Split('\n')[0]; MessageBox.Show(this, ex.Message, "Mod 管理器", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+   catch (Exception ex) { status = L.T("操作未完成：", "Not completed: ") + ex.Message.Split('\n')[0]; MessageBox.Show(this, ex.Message, L.T("Mod 管理器", "Mod Manager"), MessageBoxButtons.OK, MessageBoxIcon.Warning); }
    var st = manager.Read();
    options[0].On = st.Auto; options[1].On = st.Dialogue; options[2].On = st.Dlc;
-   if (!st.GameMatches) status += "  注意：游戏版本不是本包支持的 Steam v1.61。";
-   else if (!st.Loader) status += "  加载器未安装：点“应用”安装。";
+   if (!st.GameMatches) status += L.T("  注意：游戏版本不是本包支持的 Steam v1.61。", "  Note: this game version is not Steam v1.61.");
+   else if (!st.Loader) status += L.T("  加载器未安装：点“应用”安装。", "  Loader not installed: press Apply.");
    Invalidate();
   }
   object HitTest(Point p) {
@@ -223,7 +247,7 @@ namespace StarlitMods {
   protected override void OnMouseClick(MouseEventArgs e) {
    if (e.Button != MouseButtons.Left) return;
    var h = HitTest(e.Location);
-   var o = h as Option; if (o != null) { o.On = !o.On; status = "已更改，点“应用”后生效。"; Invalidate(); }
+   var o = h as Option; if (o != null) { o.On = !o.On; status = L.T("已更改，点“应用”后生效。", "Changed. Press Apply to use it."); Invalidate(); }
    var c = h as Command; if (c != null) c.Click();
   }
 
@@ -296,7 +320,8 @@ namespace StarlitMods {
     Center(g, "THE IDOLM@STER STARLIT SEASON  ·  Steam v1.61  ·  " + manager.Manifest.Version, f, Slate, R(0, 92, 760, 22));
 
    foreach (var o in options) DrawOption(g, o);
-   foreach (var c in commands) DrawCommand(g, c);
+   for (int i = 0; i < 3; i++) DrawCommand(g, commands[i]);
+   DrawLanguage(g, commands[3]);
 
    // Help bar, like the game's bottom guide.
    using (var b = new SolidBrush(Color.FromArgb(230, Slate))) g.FillRectangle(b, R(0, 506, 760, 54));
@@ -334,6 +359,15 @@ namespace StarlitMods {
    using (var b = new SolidBrush(Color.White)) g.FillEllipse(b, kr);
    var textArea = o.On ? new RectangleF(t.X, t.Y, t.Width - knob - 3 * k, t.Height) : new RectangleF(t.X + knob + 3 * k, t.Y, t.Width - knob - 3 * k, t.Height);
    using (var f = new Font("Segoe UI", 8, FontStyle.Bold)) Center(g, o.On ? "ON" : "OFF", f, o.On ? Color.White : Muted, textArea);
+  }
+  // Small language switch in the banner, top right.
+  void DrawLanguage(Graphics g, Command c) {
+   var r = c.Box;
+   using (var path = Round(r, r.Height / 2)) {
+    using (var b = new SolidBrush(Color.FromArgb(hover == c ? 250 : 215, Color.White))) g.FillPath(b, path);
+    using (var pen = new Pen(hover == c ? Color.FromArgb(232, 198, 100) : Color.FromArgb(160, Teal), 1.2f * k)) g.DrawPath(pen, path);
+   }
+   using (var f = F(9, FontStyle.Bold)) Center(g, c.Text, f, TealDark, r);
   }
   void DrawCommand(Graphics g, Command c) {
    bool hot = hover == c, gold = c.Primary || hot;
@@ -374,7 +408,7 @@ namespace StarlitMods {
     Console.WriteLine("Auto={0} Dialogue={1} Dlc={2} Loader={3} GameMatches={4}", st.Auto, st.Dialogue, st.Dlc, st.Loader, st.GameMatches);
     return 0;
    } catch (Exception ex) {
-    if (cli) Console.Error.WriteLine(ex.Message); else MessageBox.Show(ex.Message, "Mod 管理器", MessageBoxButtons.OK, MessageBoxIcon.Error);
+    if (cli) Console.Error.WriteLine(ex.Message); else MessageBox.Show(ex.Message, L.T("Mod 管理器", "Mod Manager"), MessageBoxButtons.OK, MessageBoxIcon.Error);
     return 1;
    }
   }

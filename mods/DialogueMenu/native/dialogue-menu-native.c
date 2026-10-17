@@ -18,9 +18,15 @@ static SetInteger put;
 #define INIT_SAVELOAD   0x125d290
 #define PAUSE_COMMU     0xd57c60
 #define SETUP_SLOT      0x1262470
-#define REFRESH_CURSOR  0xe1a5a0
 #define SLOT_NAMES      0x4e43f30 // TArray<FString> {"slot0".."slot15"}
 #define GMALLOC         0x4f08c50
+#define GAME_INSTANCE   0x4ecec98 // +0x198 SaveDataManager
+#define SLOT_FIND       0x10c0a50 // TMap<FString, FGameSaveDataObject>::FindId
+#define SLOT_CONSTRUCT  0x10af080 // FGameSaveDataObject()
+#define SLOT_ASSIGN     0x107c8f0 // FGameSaveDataObject::operator=
+#define SLOT_STRIDE     0x16dd0   // map element: hash links, FString key, value at +0x10
+#define SLOT_SIZE       0x16db8
+#define SAVE_SLOT       0x10b2060 // SaveDataManager::Save(copyFlags, FString slotName [consumed], bool)
 static int init(void){
  void* ue=GetModuleHandleW((const unsigned short*)L"UE4SS.dll");
  game=(uintptr_t)GetModuleHandleW(0);
@@ -31,7 +37,11 @@ static int init(void){
  return get&&put&&*(uint32_t*)(game+CREATE_SAVELOAD)==0x55c48b48
   &&*(uint32_t*)(game+INIT_SAVELOAD)==0x245c8948
   &&*(uint32_t*)(game+PAUSE_COMMU)==0x245c8948
-  &&*(uint32_t*)(game+SETUP_SLOT)==0x56535540;
+  &&*(uint32_t*)(game+SETUP_SLOT)==0x56535540
+  &&*(uint32_t*)(game+SLOT_FIND)==0x245c8948
+  &&*(uint32_t*)(game+SLOT_CONSTRUCT)==0x245c8948
+  &&*(uint32_t*)(game+SLOT_ASSIGN)==0x245c8948
+  &&*(uint32_t*)(game+SAVE_SLOT)==0x245c8948;
 }
 static int object(uintptr_t o){return o>0x10000&&*(uintptr_t*)o>=game&&*(uintptr_t*)o<game+0x5460000;}
 static void* alloc(uint64_t size){
@@ -59,6 +69,26 @@ __declspec(dllexport) int MenuOpen(void* state){
  ((void(*)(void*,unsigned char,unsigned char,void*,unsigned char))(game+INIT_SAVELOAD))(w,(unsigned char)mode,1,callback,0);
  ((void(*)(void*,unsigned char))(game+PAUSE_COMMU))((void*)pause,1);
  put(&lua,(int64_t)(uintptr_t)w);return 1;
+}
+// The save/load screen clears the dialogue input mode (CommuScriptInput +0x250)
+// when it closes, which leaves both the menu and the dialogue deaf to input.
+// The parser's own setters restore it: 1 = dialogue, 2 = pause menu.
+#define INPUT_COMMU 0xd0e480
+#define INPUT_PAUSE 0xd0e4f0
+__declspec(dllexport) int MenuInput(void* state){
+ Lua lua={state};if(!init())return 0;
+ uintptr_t parser=(uintptr_t)get(&lua,1);int mode=(int)get(&lua,1);
+ uintptr_t fn=mode==2?INPUT_PAUSE:INPUT_COMMU;
+ if(object(parser)&&(mode==1||mode==2)&&*(uint32_t*)(game+fn)==0x83485340)
+  ((void(*)(void*))(game+fn))((void*)parser);
+ return 0;
+}
+// Re-asserts the dialogue's paused state (used when returning to its menu).
+__declspec(dllexport) int MenuRepause(void* state){
+ Lua lua={state};if(!init())return 0;
+ uintptr_t pause=(uintptr_t)get(&lua,1);
+ if(object(pause))((void(*)(void*,unsigned char))(game+PAUSE_COMMU))((void*)pause,1);
+ return 0;
 }
 __declspec(dllexport) int MenuResume(void* state){
  Lua lua={state};if(!init())return 0;
@@ -119,4 +149,84 @@ __declspec(dllexport) int SlotSetup(void* state){
  if(object(content)&&index>=0&&index<names->num)
   ((void(*)(void*,int,unsigned char,unsigned char))(game+SETUP_SLOT))((void*)content,index,0,(unsigned char)flag);
  return 0;
+}
+
+// Saving inside a dialogue. A manual save first clears the working save object
+// and stores only the live user data, which resumes at the start of the phase
+// (PRODUCE TIME even when the dialogue was reached in FREE TIME). The AUTO save
+// (slot0) written when the dialogue starts holds the full resume point. After the
+// game saved slot N from a dialogue, store a copy of AUTO under slot N instead:
+// put AUTO in the working object and run the game's own save with no copy flags,
+// which stores the working object under the slot name and writes the file.
+typedef void (*Assign)(void*,const void*);
+static unsigned char* snapshot;
+static int64_t before[32];
+static int beforeCount;
+static uintptr_t saveManager(void){
+ uintptr_t instance=*(uintptr_t*)(game+GAME_INSTANCE);
+ if(!object(instance))return 0;
+ uintptr_t m=*(uintptr_t*)(instance+0x198);
+ return object(m)?m:0;
+}
+static unsigned char* slotValue(uintptr_t m,int index){
+ uintptr_t master=*(uintptr_t*)(m+0x39e0);
+ Array* names=(Array*)(game+SLOT_NAMES);
+ if(!object(master)||index<0||index>=names->num)return 0;
+ int id=-1;
+ int* found=((int*(*)(void*,int*,void*))(game+SLOT_FIND))((void*)(master+0x30),&id,&((Array*)names->data)[index]);
+ if(!found||*found<0)return 0;
+ return (unsigned char*)(*(uintptr_t*)(master+0x30)+(uintptr_t)*found*SLOT_STRIDE+0x10);
+}
+// Save timestamp (UserSaveData.SaveTime); play time does not move while paused.
+static int64_t slotTime(uintptr_t m,int index){
+ unsigned char* v=slotValue(m,index);
+ return v?*(int64_t*)(v+0x38+8):-1;
+}
+static int64_t playTime(unsigned char* v){return *(int64_t*)(v+0x30);}
+// Remembers every slot's play time when the save screen opens.
+__declspec(dllexport) int DialogueSaveBegin(void* state){
+ Lua lua={state};
+ if(!init()){if(put)put(&lua,-1);return put?1:0;}
+ uintptr_t m=saveManager();
+ if(!m){put(&lua,-2);return 1;}
+ Array* names=(Array*)(game+SLOT_NAMES);
+ beforeCount=names->num<32?names->num:32;
+ for(int i=0;i<beforeCount;i++)before[i]=slotTime(m,i);
+ put(&lua,1);return 1;
+}
+// Called when the save screen is idle again. Arguments: save/load widget.
+// Returns the slot index rewritten from AUTO, 0 when nothing changed, or negative.
+__declspec(dllexport) int DialogueSaveFix(void* state){
+ Lua lua={state};
+ if(!init()){if(put)put(&lua,-1);return put?1:0;}
+ uintptr_t w=(uintptr_t)get(&lua,1);
+ uintptr_t m=saveManager();
+ if(!m||!object(w)){put(&lua,-2);return 1;}
+ int index=*(int*)(w+0x4e0);
+ if(index<=0||index>=beforeCount){put(&lua,0);return 1;}
+ int64_t now=slotTime(m,index);
+ if(now==before[index]){put(&lua,0);return 1;} // cancelled or not saved
+ unsigned char* autosave=slotValue(m,0);
+ if(!autosave){put(&lua,-3);return 1;}
+ // AUTO from a later point than this save (another playthrough): keep the game's save.
+ unsigned char* saved=slotValue(m,index);
+ if(!saved||playTime(autosave)>playTime(saved)){before[index]=now;put(&lua,-4);return 1;}
+ Array* names=(Array*)(game+SLOT_NAMES);
+ Array* name=&((Array*)names->data)[index];
+ unsigned short* copy=(unsigned short*)alloc((uint64_t)name->num*2);
+ if(!copy){put(&lua,-5);return 1;}
+ for(int i=0;i<name->num;i++)copy[i]=((unsigned short*)name->data)[i];
+ Array arg={copy,name->num,name->num};
+ if(!snapshot){
+  snapshot=(unsigned char*)alloc(SLOT_SIZE+0x40);
+  if(!snapshot){release(copy);put(&lua,-6);return 1;}
+  ((void(*)(void*))(game+SLOT_CONSTRUCT))(snapshot);
+ }
+ unsigned char* working=(unsigned char*)(m+0x39e8);
+ ((Assign)(game+SLOT_ASSIGN))(snapshot,working);
+ ((Assign)(game+SLOT_ASSIGN))(working,autosave);
+ ((void(*)(void*,unsigned char,void*,unsigned char))(game+SAVE_SLOT))((void*)m,0,&arg,*(unsigned char*)(w+0x502));
+ ((Assign)(game+SLOT_ASSIGN))(working,snapshot);
+ before[index]=slotTime(m,index);
+ put(&lua,index);return 1;
 }
