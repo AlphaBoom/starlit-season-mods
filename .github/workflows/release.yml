@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package version for a test build (no release is published)
+        default: 0.0.0-test
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build package
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { '${{ inputs.version }}' }
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Version $version
+          "VERSION=$version" >> $env:GITHUB_ENV
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StarlitSeasonMods-${{ env.VERSION }}
+          path: dist/*.zip
+
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $zip = Get-Item dist/*.zip
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+          $notes = @"
+          解压到游戏根目录（有 StarlitSeason.exe 的文件夹），然后双击 StarlitMods.exe。详见 README。
+
+          SHA-256: ``$hash``
+          "@
+          gh release create $env:GITHUB_REF_NAME $zip --title "StarlitSeasonMods $env:VERSION" --notes $notes

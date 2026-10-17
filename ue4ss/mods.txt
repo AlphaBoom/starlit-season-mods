@@ -1,0 +1,2 @@
+TextAutoToggle : 1
+DialogueMenu : 1

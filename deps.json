@@ -1,0 +1,18 @@
+{
+  "gameExeSha256": "881DF05D33A9B25D276122F010169D790E6CEE18667136983F8BEF0CAA6BF2C2",
+  "ue4ss": {
+    "version": "3.0.1-1170-g9e7fed53",
+    "url": "https://github.com/AlphaBoom/starlit-season-mods/releases/download/deps-ue4ss-3.0.1-1170/UE4SS_v3.0.1-1170-g9e7fed53.zip",
+    "sha256": "C07A0ECE72CCB381A3CA97B602071FE919EB6DEF052F4FF183FFC524D8B18933"
+  },
+  "smokeApi": {
+    "version": "4.1.3",
+    "url": "https://github.com/acidicoala/SmokeAPI/releases/download/v4.1.3/SmokeAPI-v4.1.3.zip",
+    "sha256": "8A443B5B4C434A4904B272EA4D93AD7E13E212626C0E49466176CB828C1D2A3B"
+  },
+  "textAutoToggle": {
+    "repository": "AlphaBoom/starlit-season-text-auto-toggle",
+    "commit": "d7eca62b3dd292432cdfe4b79c142f4f39f92d6a"
+  },
+  "zig": "0.16.0"
+}

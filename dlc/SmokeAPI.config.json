@@ -1,0 +1,13 @@
+{
+  "$version": 4,
+  "logging": false,
+  "log_steam_http": false,
+  "default_app_status": "original",
+  "override_app_status": {
+    "1046480": "unlocked"
+  },
+  "override_dlc_status": {},
+  "auto_inject_inventory": false,
+  "extra_inventory_items": [],
+  "extra_dlcs": {}
+}

@@ -1,0 +1,9 @@
+.cache/
+dist/
+build/
+*.dll
+*.exe
+*.pdb
+*.lib
+*.zip
+*.log
