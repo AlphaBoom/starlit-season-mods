@@ -10,6 +10,26 @@
 | 对话存读档增强 | 对话菜单增加 セーブする / ロードする；独立的 QUICK 存档位（AUTO 下方）；F5 快存、F6 快读。详见 [说明](mods/DialogueMenu/README.md)。 |
 | DLC 解锁 | 使用 [SmokeAPI](https://github.com/acidicoala/SmokeAPI) 4.1.3。 |
 
+## 功能一览
+
+**对话菜单里的存读档。** 对话中按 Esc（手柄菜单键）打开的原生菜单，在「戻る」上方多了 セーブする / ロードする，
+直接进入游戏原生的存档 / 读档界面，返回后回到菜单。
+
+![对话菜单中的 セーブする / ロードする](docs/images/pause-menu.jpg)
+
+**独立的 QUICK 存档位。** QUICK 位在 AUTO 下方，和 AUTO、Slot 01–15 互不覆盖。对话中 **F5** 直接存到 QUICK，
+**F6** 直接读取 QUICK。标题画面的 LOAD、游戏内的存读档界面也能看到并手动使用它。
+
+![读档界面：AUTO 下方的 QUICK 存档位](docs/images/quick-slot.jpg)
+
+**对话自动 / 手动切换。** 键盘 A、手柄 Y / △ 切换，提示栏的图标跟随当前使用的设备（下图为键盘）。
+
+![提示栏中的 A AUTO ON](docs/images/auto-keyboard.jpg)
+
+**Mod 管理器。** 点卡片切换开关，点「应用」生效；「卸载全部 Mod」恢复原版。
+
+![StarlitMods.exe](docs/images/manager.png)
+
 ## 安装
 
 1. **关闭游戏**。在 Steam 中右键游戏 → **管理 → 浏览本地文件**，打开游戏根目录（有 `StarlitSeason.exe` 的文件夹）。

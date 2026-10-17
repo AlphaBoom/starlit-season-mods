@@ -5,6 +5,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Text;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -147,56 +149,217 @@ namespace StarlitMods {
   }
  }
 
+ // Window styled after the game's menus: pastel sky background with bubbles,
+ // a teal MENU banner, white cards, gold / silver pointed buttons and the
+ // slate help bar along the bottom. Everything is painted here; no child controls.
  public sealed class ManagerForm : Form {
+  sealed class Option { public string Title, Detail; public bool On; public RectangleF Card, Toggle; }
+  sealed class Command { public string Text; public bool Primary; public Action Click; public RectangleF Box; }
+  static readonly Color Ink = Color.FromArgb(58, 74, 92), Muted = Color.FromArgb(118, 132, 146);
+  static readonly Color Teal = Color.FromArgb(52, 189, 183), TealDark = Color.FromArgb(32, 150, 150);
+  static readonly Color Slate = Color.FromArgb(62, 79, 99), Gold = Color.FromArgb(122, 90, 18);
   readonly Manager manager;
-  readonly CheckBox autoBox = new CheckBox(), dialogueBox = new CheckBox(), dlcBox = new CheckBox();
-  readonly Label status = new Label();
+  readonly Option[] options;
+  readonly Command[] commands;
+  readonly float k; // DPI scale
+  string status = "";
+  object hover;
   public ManagerForm(Manager m) {
    manager = m;
-   Text = "星耀季节 Mod 管理器 " + m.Manifest.Version;
-   ClientSize = new Size(640, 470);
+   using (var g = CreateGraphics()) k = g.DpiX / 96f;
+   Text = "STARLIT SEASON Mod 管理器 " + m.Manifest.Version;
+   AutoScaleMode = AutoScaleMode.None;
+   ClientSize = new Size(S(760), S(560));
+   FormBorderStyle = FormBorderStyle.FixedSingle; MaximizeBox = false;
+   StartPosition = FormStartPosition.CenterScreen;
+   DoubleBuffered = true;
    Font = new Font("Microsoft YaHei UI", 10);
-   FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false;
-   StartPosition = FormStartPosition.CenterScreen; BackColor = Color.FromArgb(246, 248, 252);
-   Controls.Add(new Label { Text = "STARLIT SEASON  ·  MODS", Font = new Font("Segoe UI", 18, FontStyle.Bold), Bounds = new Rectangle(28, 22, 590, 42) });
-   Controls.Add(new Label { Text = "勾选要启用的功能，点击“应用”。修改前请关闭游戏，之后从 Steam 正常启动。", Bounds = new Rectangle(30, 70, 590, 30) });
-   AddOption(autoBox, "对话自动 / 手动切换", "对话中按 手柄 Y / △ 或 键盘 A 切换；提示栏显示 AUTO ON / OFF。", 112);
-   AddOption(dialogueBox, "对话存读档增强", "对话菜单增加 セーブ / ロード；独立 QUICK 存档位；F5 快存、F6 快读。", 187);
-   AddOption(dlcBox, "DLC 解锁（SmokeAPI）", "关闭时恢复游戏原有的 Steam API 文件。", 262);
-   var apply = new Button { Text = "应用", Bounds = new Rectangle(30, 345, 150, 42) };
-   apply.Click += (s, e) => Run(() => manager.Apply(autoBox.Checked, dialogueBox.Checked, dlcBox.Checked), "已应用，下次启动游戏生效。");
-   var uninstall = new Button { Text = "卸载全部 Mod", Bounds = new Rectangle(195, 345, 150, 42) };
-   uninstall.Click += (s, e) => {
-    if (MessageBox.Show(this, "卸载本包安装的全部 Mod 和加载器，并恢复原有 Steam API？\n\n存档（包括 QUICK 存档位）会保留。", "卸载 Mod", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
-     Run(manager.Uninstall, "已卸载。可删除 StarlitMods.exe 和 StarlitModsData 文件夹；重新点“应用”可再次安装。");
+   options = new[] {
+    new Option { Title = "对话自动 / 手动切换", Detail = "对话中按 手柄 Y / 三角键 或 键盘 A 切换，提示栏显示 AUTO ON / OFF" },
+    new Option { Title = "对话存读档增强", Detail = "菜单增加 セーブ / ロード · 独立 QUICK 存档位 · F5 快存 / F6 快读" },
+    new Option { Title = "DLC 解锁", Detail = "SmokeAPI 4.1.3 · 关闭时恢复游戏原有的 Steam API" },
    };
-   var folder = new Button { Text = "打开游戏目录", Bounds = new Rectangle(360, 345, 150, 42) };
-   folder.Click += (s, e) => Process.Start("explorer.exe", manager.Root);
-   Controls.Add(apply); Controls.Add(uninstall); Controls.Add(folder);
-   status.Bounds = new Rectangle(30, 400, 590, 56); status.ForeColor = Color.FromArgb(55, 76, 95);
-   Controls.Add(status);
+   commands = new[] {
+    new Command { Text = "应用", Primary = true, Click = () => Run(() => manager.Apply(options[0].On, options[1].On, options[2].On), "已应用，下次启动游戏生效。") },
+    new Command { Text = "卸载全部 Mod", Click = () => {
+     if (MessageBox.Show(this, "卸载本包安装的全部 Mod 和加载器，并恢复原有 Steam API？\n\n存档（包括 QUICK 存档位）会保留。", "卸载 Mod", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+      Run(manager.Uninstall, "已卸载。可删除 StarlitMods.exe 和 StarlitModsData 文件夹；重新点“应用”可再次安装。");
+    } },
+    new Command { Text = "打开游戏目录", Click = () => Process.Start("explorer.exe", manager.Root) },
+   };
+   for (int i = 0; i < options.Length; i++) {
+    options[i].Card = R(40, 128 + i * 98, 680, 84);
+    options[i].Toggle = R(40 + 680 - 24 - 64, 128 + i * 98 + 26, 64, 32);
+   }
+   for (int i = 0; i < commands.Length; i++) commands[i].Box = R(52 + i * 226, 432, 204, 50);
    Shown += (s, e) => {
     if (manager.FirstRun) Run(() => manager.Apply(true, true, true), "首次运行：已按默认配置启用全部功能。");
-    else Run(() => { }, "已读取当前状态。");
+    else Run(() => { }, "点击卡片切换功能，然后点“应用”。修改前请先关闭游戏。");
    };
   }
-  void AddOption(CheckBox box, string title, string detail, int y) {
-   box.Text = title; box.Bounds = new Rectangle(32, y, 580, 29); Controls.Add(box);
-   Controls.Add(new Label { Text = detail, ForeColor = Color.DimGray, Bounds = new Rectangle(55, y + 31, 560, 28) });
-  }
+  int S(float v) { return (int)Math.Round(v * k); }
+  RectangleF R(float x, float y, float w, float h) { return new RectangleF(x * k, y * k, w * k, h * k); }
+  static Font F(float size, FontStyle style) { return new Font("Microsoft YaHei UI", size, style, GraphicsUnit.Point); }
+
   void Run(Action work, string message) {
-   try { work(); status.Text = message; }
-   catch (Exception ex) { status.Text = "操作未完成。"; MessageBox.Show(this, ex.Message, "Mod 管理器", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+   try { work(); status = message; }
+   catch (Exception ex) { status = "操作未完成：" + ex.Message.Split('\n')[0]; MessageBox.Show(this, ex.Message, "Mod 管理器", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
    var st = manager.Read();
-   autoBox.Checked = st.Auto; dialogueBox.Checked = st.Dialogue; dlcBox.Checked = st.Dlc;
-   if (!st.GameMatches) status.Text += "\n注意：游戏版本不是本包支持的 Steam v1.61。";
-   else if (!st.Loader) status.Text += "\n加载器未安装：点击“应用”安装。";
+   options[0].On = st.Auto; options[1].On = st.Dialogue; options[2].On = st.Dlc;
+   if (!st.GameMatches) status += "  注意：游戏版本不是本包支持的 Steam v1.61。";
+   else if (!st.Loader) status += "  加载器未安装：点“应用”安装。";
+   Invalidate();
+  }
+  object HitTest(Point p) {
+   foreach (var o in options) if (o.Card.Contains(p)) return o;
+   foreach (var c in commands) if (c.Box.Contains(p)) return c;
+   return null;
+  }
+  protected override void OnMouseMove(MouseEventArgs e) {
+   var h = HitTest(e.Location);
+   if (h != hover) { hover = h; Cursor = h != null ? Cursors.Hand : Cursors.Default; Invalidate(); }
+  }
+  protected override void OnMouseLeave(EventArgs e) { hover = null; Invalidate(); }
+  protected override void OnMouseClick(MouseEventArgs e) {
+   if (e.Button != MouseButtons.Left) return;
+   var h = HitTest(e.Location);
+   var o = h as Option; if (o != null) { o.On = !o.On; status = "已更改，点“应用”后生效。"; Invalidate(); }
+   var c = h as Command; if (c != null) c.Click();
+  }
+
+  static GraphicsPath Round(RectangleF r, float radius) {
+   var p = new GraphicsPath(); float d = radius * 2;
+   p.AddArc(r.X, r.Y, d, d, 180, 90); p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+   p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90); p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+   p.CloseFigure(); return p;
+  }
+  // The game's buttons and labels: a bar with pointed ends.
+  static GraphicsPath Hexagon(RectangleF r) {
+   float t = r.Height / 2;
+   var p = new GraphicsPath();
+   p.AddPolygon(new[] { new PointF(r.X, r.Y + t), new PointF(r.X + t, r.Y), new PointF(r.Right - t, r.Y),
+    new PointF(r.Right, r.Y + t), new PointF(r.Right - t, r.Bottom), new PointF(r.X + t, r.Bottom) });
+   return p;
+  }
+  static PointF[] Diamond(float x, float y, float d) {
+   return new[] { new PointF(x, y - d), new PointF(x + d, y), new PointF(x, y + d), new PointF(x - d, y) };
+  }
+  void Sparkle(Graphics g, float x, float y, float size, int alpha) {
+   x *= k; y *= k; size *= k; float w = size / 5;
+   using (var b = new SolidBrush(Color.FromArgb(alpha, Color.White)))
+    g.FillPolygon(b, new[] { new PointF(x, y - size), new PointF(x + w, y - w), new PointF(x + size, y), new PointF(x + w, y + w),
+     new PointF(x, y + size), new PointF(x - w, y + w), new PointF(x - size, y), new PointF(x - w, y - w) });
+  }
+  void Bubble(Graphics g, float x, float y, float r, int alpha) {
+   var rect = R(x - r, y - r, r * 2, r * 2);
+   using (var path = new GraphicsPath()) {
+    path.AddEllipse(rect);
+    using (var b = new PathGradientBrush(path)) {
+     b.CenterColor = Color.FromArgb(alpha / 4, Color.White);
+     b.SurroundColors = new[] { Color.FromArgb(alpha, Color.White) };
+     g.FillPath(b, path);
+    }
+   }
+   using (var pen = new Pen(Color.FromArgb(Math.Min(255, alpha + 40), Color.White), 1.2f * k)) g.DrawEllipse(pen, rect);
+  }
+  static void Center(Graphics g, string text, Font f, Color c, RectangleF r) {
+   var fmt = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+   using (var b = new SolidBrush(c)) g.DrawString(text, f, b, r, fmt);
+  }
+
+  protected override void OnPaint(PaintEventArgs e) {
+   var g = e.Graphics;
+   g.SmoothingMode = SmoothingMode.AntiAlias;
+   g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+   var all = new RectangleF(0, 0, ClientSize.Width, ClientSize.Height);
+   // Sky to cream, like the title screen.
+   using (var b = new LinearGradientBrush(all, Color.White, Color.White, 90f)) {
+    var blend = new ColorBlend();
+    blend.Colors = new[] { Color.FromArgb(150, 214, 240), Color.FromArgb(214, 238, 247), Color.FromArgb(248, 244, 226), Color.FromArgb(252, 232, 178) };
+    blend.Positions = new[] { 0f, 0.45f, 0.78f, 1f };
+    b.InterpolationColors = blend; g.FillRectangle(b, all);
+   }
+   Bubble(g, 70, 70, 46, 70); Bubble(g, 150, 26, 22, 60); Bubble(g, 690, 60, 54, 60); Bubble(g, 610, 18, 18, 55);
+   Bubble(g, 738, 384, 30, 45); Bubble(g, 22, 412, 26, 45); Bubble(g, 404, 112, 12, 50);
+   Sparkle(g, 560, 30, 14, 230); Sparkle(g, 232, 96, 9, 200); Sparkle(g, 726, 116, 11, 220); Sparkle(g, 26, 160, 8, 180);
+   Sparkle(g, 712, 414, 9, 200);
+
+   // MENU banner: translucent bar with a teal pointed label.
+   using (var b = new SolidBrush(Color.FromArgb(110, 120, 136, 150))) g.FillRectangle(b, R(0, 48, 760, 30));
+   var label = R(200, 40, 360, 46);
+   using (var path = Hexagon(label)) {
+    using (var b = new LinearGradientBrush(label, Color.FromArgb(96, 216, 208), TealDark, 90f)) g.FillPath(b, path);
+    using (var pen = new Pen(Color.FromArgb(220, Color.White), 1.6f * k)) g.DrawPath(pen, path);
+   }
+   using (var f = new Font("Segoe UI", 15, FontStyle.Bold)) Center(g, "MOD MENU", f, Color.White, label);
+   using (var f = F(9, FontStyle.Regular))
+    Center(g, "THE IDOLM@STER STARLIT SEASON  ·  Steam v1.61  ·  " + manager.Manifest.Version, f, Slate, R(0, 92, 760, 22));
+
+   foreach (var o in options) DrawOption(g, o);
+   foreach (var c in commands) DrawCommand(g, c);
+
+   // Help bar, like the game's bottom guide.
+   using (var b = new SolidBrush(Color.FromArgb(230, Slate))) g.FillRectangle(b, R(0, 506, 760, 54));
+   using (var b = new SolidBrush(Teal)) g.FillRectangle(b, R(0, 506, 760, 3));
+   using (var f = F(9.5f, FontStyle.Regular)) {
+    var fmt = new StringFormat { LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter };
+    using (var b = new SolidBrush(Color.White)) g.DrawString(status, f, b, R(28, 509, 704, 51), fmt);
+   }
+  }
+  void DrawOption(Graphics g, Option o) {
+   bool hot = hover == o;
+   var card = o.Card;
+   using (var shadow = Round(new RectangleF(card.X, card.Y + 3 * k, card.Width, card.Height), 10 * k))
+   using (var b = new SolidBrush(Color.FromArgb(30, 40, 70, 100))) g.FillPath(b, shadow);
+   using (var path = Round(card, 10 * k)) {
+    using (var b = new SolidBrush(Color.FromArgb(hot ? 252 : 238, Color.White))) g.FillPath(b, path);
+    using (var pen = new Pen(hot ? Color.FromArgb(232, 198, 100) : Color.FromArgb(170, Color.White), (hot ? 2f : 1.2f) * k)) g.DrawPath(pen, path);
+   }
+   var accent = o.On ? Teal : Color.FromArgb(192, 202, 212);
+   using (var b = new SolidBrush(accent)) {
+    g.FillRectangle(b, card.X, card.Y + 14 * k, 5 * k, card.Height - 28 * k);
+    g.FillPolygon(b, Diamond(card.X + 30 * k, card.Y + 30 * k, 7 * k));
+   }
+   using (var f = F(12.5f, FontStyle.Bold)) using (var b = new SolidBrush(Ink)) g.DrawString(o.Title, f, b, card.X + 46 * k, card.Y + 15 * k);
+   using (var f = F(9.5f, FontStyle.Regular)) using (var b = new SolidBrush(Muted)) g.DrawString(o.Detail, f, b, card.X + 46 * k, card.Y + 48 * k);
+   // Toggle switch.
+   var t = o.Toggle;
+   using (var path = Round(t, t.Height / 2)) {
+    if (o.On) using (var b = new LinearGradientBrush(t, Color.FromArgb(100, 220, 212), TealDark, 90f)) g.FillPath(b, path);
+    else using (var b = new SolidBrush(Color.FromArgb(208, 216, 224))) g.FillPath(b, path);
+   }
+   float knob = t.Height - 6 * k;
+   var kr = new RectangleF(o.On ? t.Right - knob - 3 * k : t.X + 3 * k, t.Y + 3 * k, knob, knob);
+   using (var b = new SolidBrush(Color.FromArgb(40, 0, 0, 0))) g.FillEllipse(b, kr.X, kr.Y + 1.5f * k, kr.Width, kr.Height);
+   using (var b = new SolidBrush(Color.White)) g.FillEllipse(b, kr);
+   var textArea = o.On ? new RectangleF(t.X, t.Y, t.Width - knob - 3 * k, t.Height) : new RectangleF(t.X + knob + 3 * k, t.Y, t.Width - knob - 3 * k, t.Height);
+   using (var f = new Font("Segoe UI", 8, FontStyle.Bold)) Center(g, o.On ? "ON" : "OFF", f, o.On ? Color.White : Muted, textArea);
+  }
+  void DrawCommand(Graphics g, Command c) {
+   bool hot = hover == c, gold = c.Primary || hot;
+   var r = c.Box;
+   using (var shadow = Hexagon(new RectangleF(r.X, r.Y + 3 * k, r.Width, r.Height)))
+   using (var b = new SolidBrush(Color.FromArgb(35, 40, 60, 90))) g.FillPath(b, shadow);
+   using (var path = Hexagon(r)) {
+    var top = gold ? Color.FromArgb(255, 247, 206) : Color.White;
+    var bottom = gold ? Color.FromArgb(236, 202, 98) : Color.FromArgb(205, 211, 218);
+    using (var b = new LinearGradientBrush(r, top, bottom, 90f)) g.FillPath(b, path);
+    // Diamond pattern on the left end, as on the game's selected buttons.
+    var clip = g.Clip; g.SetClip(path, CombineMode.Intersect);
+    using (var b = new SolidBrush(Color.FromArgb(gold ? 80 : 60, Color.White)))
+     for (int i = 0; i < 5; i++) g.FillPolygon(b, Diamond(r.X + (14 + i * 14) * k, r.Y + r.Height / 2 + (i % 2 == 0 ? -8 : 8) * k, 10 * k));
+    g.Clip = clip;
+    using (var pen = new Pen(gold ? Color.FromArgb(226, 190, 90) : Color.FromArgb(180, 188, 198), 1.4f * k)) g.DrawPath(pen, path);
+   }
+   using (var f = F(11, FontStyle.Bold)) Center(g, c.Text, f, gold ? Gold : Color.FromArgb(90, 100, 112), r);
   }
  }
 
  public static class Program {
+  [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool SetProcessDPIAware();
   [STAThread]
   public static int Main(string[] args) {
+   SetProcessDPIAware();
    Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
    bool cli = args.Length > 0;
    try {
