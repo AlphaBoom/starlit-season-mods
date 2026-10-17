@@ -173,85 +173,19 @@ local function findNamed(o,name,class)
  end
  walk(o);return found
 end
--- QUICK row colour. Slate tints only darken (clamped to 1) and the row texture
--- holds both the teal header and the white body, so: keep the normal row, and
--- overlay its header band with the game's neutral grey row image tinted violet,
--- clipped to the header height.
-local QUICK_TINT={R=0.74,G=0.58,B=1.0,A=1.0}
--- Overlay boxes as row fractions {x0,y0,x1,y1,opacity,header}. Header boxes cover
--- exactly the slot's teal band (0.14..0.56 of the row) at full strength up to the slant,
--- then strips that fade out like the teal-to-cream gradient (amount ~ (1-u)^1.4).
--- The grey row's band is slightly shorter (0.168..0.531), so header boxes stretch the
--- grey image to fit. The badge column keeps the grey image unscaled.
-local BAND0,BAND1=0.14,0.57
-local GREY0,GREY1=0.168,0.531
-local BOXES={{0,BAND0,0.35,BAND1,1,true},{0,0,0.062,0.76,1,false},
- -- the badge's slanted top-right corner, as four steps
- {0.062,0.042,0.064,BAND0,1,false},{0.064,0.063,0.066,BAND0,1,false},
- {0.066,0.084,0.0685,BAND0,1,false},{0.0685,0.105,0.0706,BAND0,1,false}}
-do
- local x0,n=0.35,32
- for k=0,n-1 do
-  local a,b=x0+(1-x0)*k/n,x0+(1-x0)*(k+1)/n
-  local u=((a+b)/2-0.283)/0.717
-  BOXES[#BOXES+1]={a,BAND0,b,BAND1,(1-u)^1.4,true}
- end
-end
+-- QUICK row style: one of the game's own row styles (the same switch that gives
+-- AUTO its look), so textures, gradient and shape are the game's.
+local QUICK_STYLE='Clear'
 local function tint(q)
  if not valid(q)then return end
  local style=findNamed(q,'WidgetSwitcher_clear')
  if not valid(style)then return end
- local grey=findNamed(style,'Image_14')
- if not valid(grey)then return end
- for _,n in ipairs({'Normal','Clear'})do
-  local panel=findNamed(style,n)
-  if valid(panel)and not _G['DMOv'..panel:GetAddress()]then
-   _G['DMOv'..panel:GetAddress()]=true
-   local base;for j=0,panel:GetChildrenCount()-1 do local c=panel:GetChildAt(j);if c:IsA('/Script/UMG.Image')then base=c break end end
-   if valid(base)then
-    -- Build the overlay first; the panel is only rebuilt once every widget exists.
-    local tree=panel:GetOuter()
-    local made={}
-    if not valid(canvasClass)then canvasClass=StaticFindObject('/Script/UMG.CanvasPanel')end
-    if not valid(imageClass)then imageClass=StaticFindObject('/Script/UMG.Image')end
-    local ok,err=pcall(function()
-     for i=1,#BOXES do
-      local clip=StaticConstructObject(canvasClass,tree)
-      local img=StaticConstructObject(imageClass,tree)
-      if not valid(clip)or not valid(img)then error('construct failed')end
-      made[i]={clip,img}
-     end
-    end)
-    if not ok then log('QUICK overlay skipped: '..tostring(err))return end
-    -- Rebuild child order: background, overlay, then the rest (icons, tags).
-    local kids={}
-    for j=0,panel:GetChildrenCount()-1 do local c=panel:GetChildAt(j);local sl=c.Slot
-     kids[#kids+1]={w=c,a=sl:GetAnchors(),al=sl:GetAlignment(),p=sl:GetPosition(),s=sl:GetSize(),z=sl:GetZOrder(),auto=sl:GetAutoSize()}end
-    q:ForceLayoutPrepass()
-    local b=kids[1]
-    -- The background spans the row (left/top offset, right margin, fixed height).
-    local W=q:GetDesiredSize().X-b.p.X-b.s.X
-    local H=b.s.Y
-    panel:ClearChildren()
-    local function put(k)local sl=panel:AddChildToCanvas(k.w);sl:SetAnchors(k.a);sl:SetAlignment(k.al);sl:SetPosition(k.p);sl:SetSize(k.s);sl:SetZOrder(k.z);sl:SetAutoSize(k.auto)end
-    put(kids[1])
-    for i,box in ipairs(BOXES)do
-     local clip,img=made[i][1],made[i][2]
-     img:SetBrush(grey.Brush);img:SetColorAndOpacity(QUICK_TINT)
-     clip.Clipping=1;clip:SetVisibility(4);img:SetVisibility(4);clip:SetRenderOpacity(box[5])
-     local cs=panel:AddChildToCanvas(clip)
-     cs:SetAnchors({Minimum={X=0,Y=0},Maximum={X=0,Y=0}});cs:SetZOrder(b.z)
-     cs:SetPosition({X=b.p.X+W*box[1],Y=b.p.Y+H*box[2]});cs:SetSize({X=W*(box[3]-box[1]),Y=H*(box[4]-box[2])})
-     local is=clip:AddChildToCanvas(img)
-     is:SetAnchors({Minimum={X=0,Y=0},Maximum={X=0,Y=0}})
-     local scale,top=1,0
-     if box[6]then scale=(BAND1-BAND0)/(GREY1-GREY0);top=BAND0-GREY0*scale end
-     is:SetPosition({X=-W*box[1],Y=H*(top-box[2])});is:SetSize({X=W,Y=H*scale})
-    end
-    for i=2,#kids do put(kids[i])end
-    log(string.format('QUICK overlay %s %.0fx%.0f',n,W,H))
-   end
-  end
+ local panel=findNamed(style,QUICK_STYLE)
+ if not valid(panel)then return end
+ if style:GetActiveWidget():GetAddress()~=panel:GetAddress()then style:SetActiveWidget(panel)end
+ for j=0,panel:GetChildrenCount()-1 do
+  local c=panel:GetChildAt(j)
+  if c:GetFName():ToString():find('clear_icon')and c:IsVisible()then c:SetVisibility(1)end
  end
 end
 local function label(q)
@@ -264,6 +198,8 @@ local function attachQuick(w)
  local id=w:GetAddress();local info=screens[id]
  if info then return info end
  if not quickReady or #w.SlotList~=QUICK then return end
+ if not valid(pc)then pc=gameplay:GetPlayerController(w:GetWorld(),0)end
+ if not valid(pc)then return end -- retried next tick
  screens[id]={widget=w} -- attempted once per screen, even if it fails below
  local first=w.SlotList[2] -- Slot 01; AUTO (index 0) lives in its own panel.
  local list=valid(first)and first:GetParent()
@@ -341,9 +277,74 @@ local function quickStep(s)
  end
 end
 
+-- Outside a dialogue F5 / F6 go through the scene's SYSTEM menu exactly as a click
+-- would: guide bar SYSTEM, then セーブ / ロード, then the QUICK slot; afterwards the
+-- menu closes itself (OnCancel). The game decides whether saving is allowed here.
+-- The SYSTEM menu is kept transparent meanwhile so only the save screen is seen.
+local scene=nil
+local function visibleOf(class)
+ for _,w in ipairs(FindAllOf(class)or{})do if valid(w)and w:IsInViewport()and w:IsVisible()then return w end end
+end
+-- The SYSTEM button: home guide bar (OnClickedSystem) or the map screen (OnClickSystem).
+local systemFn={}
+local function systemButton()
+ for _,w in ipairs(FindAllOf('UserWidget')or{})do if valid(w)and w:IsInViewport()and w:IsVisible()then
+  local c=w:GetClass();local id=c:GetAddress()
+  if systemFn[id]==nil then
+   systemFn[id]=false
+   local k=c
+   while valid(k)and systemFn[id]==false do
+    k:ForEachFunction(function(f)local n=f:GetFName():ToString();if n=='OnClickedSystem'or n=='OnClickSystem'then systemFn[id]=n end end)
+    k=k:GetSuperStruct()
+   end
+  end
+  if systemFn[id]then return w,systemFn[id]end
+ end end
+end
+function sceneQuick(mode)
+ if scene then return end
+ local w,fn=systemButton()
+ if not w or visibleOf('WidgetSystemSelectBase')or visibleOf('WidgetSaveLoad')then log('Ignored: no SYSTEM menu here')return end
+ scene={mode=mode,step='system',frames=0}
+ w[fn](w)
+end
+local function sceneTick()
+ local t=scene;t.frames=t.frames+1
+ if t.step=='system'then
+  local sys=visibleOf('WidgetSystemSelectBase')
+  if sys and not t.sys then t.sys=sys;t.at=t.frames;sys:SetRenderOpacity(0)end
+  if t.sys and t.frames-t.at>20 then
+   t.sys:OnHoveredCursor(t.mode);t.sys:OnClickedCursor(t.mode);t.step='screen';t.at=t.frames
+  elseif not t.sys and t.frames>90 then log('Ignored: SYSTEM menu not available');scene=nil end
+ elseif t.step=='screen'then
+  local w=visibleOf('WidgetSaveLoad')
+  if w and not session then
+   attachQuick(w)
+   session={widget=w,mode=t.mode,quick=true,frames=0,step=0,scene=true}
+   log('Opened '..(t.mode==0 and 'SAVE'or'LOAD')..' quick (scene)')
+   t.step='wait'
+  elseif t.frames-t.at>120 then log('Quick: save screen did not open');if valid(t.sys)then t.sys:SetRenderOpacity(1)end;scene=nil end
+ elseif t.step=='wait'then
+  if not session then t.step='close';t.at=t.frames end
+ elseif t.step=='close'then
+  -- After a confirmed load the game travels away. Otherwise the save screen's own
+  -- callback reopens the SYSTEM menu; close it once it accepts input (retrying while
+  -- its in-animation runs), and only then make it visible again.
+  local sys=valid(t.sys)and t.sys:IsInViewport()and t.sys:IsVisible()
+  if sys then
+   t.seen=true
+   if (t.frames-t.at)%30==20 then t.sys:OnCancel()end
+   if t.frames-t.at>600 then t.sys:SetRenderOpacity(1);scene=nil end
+  elseif t.seen or t.frames-t.at>600 then
+   if valid(t.sys)then t.sys:SetRenderOpacity(1)end
+   scene=nil
+  end
+ end
+end
 local function open(request)
  if session then log('Ignored: save/load screen already open')return end
- local parser=activeParser();if not valid(parser)then log('Ignored: no active dialogue')return end
+ local parser=activeParser()
+ if not valid(parser)then if request.quick then sceneQuick(request.mode)end return end
  local pause=parser.CommuScriptPause;if not valid(pause)then log('Ignored: no dialogue pause')return end
  if not request.fromPause and pause.DMPaused~=0 then
   -- F5 / F6 from the open dialogue menu: run over the menu and come back to it.
@@ -397,6 +398,7 @@ LoopInGameThreadWithDelay(1,function()
     elseif valid(info.quick)and w:IsInViewport()then label(info.quick);tint(info.quick)end
    end
   end
+  if scene then local ok,e=pcall(sceneTick);if not ok then log('Quick (scene): '..tostring(e));scene=nil end end
   if pending then local request=pending;pending=nil;open(request)end
   if session then
    local s=session;s.frames=s.frames+1
