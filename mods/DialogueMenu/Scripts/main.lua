@@ -6,8 +6,17 @@ local function native(name)return assert(package.loadlib(directory..'../Dialogue
 local openMenu,resume,repause,setInput=native('MenuOpen'),native('MenuResume'),native('MenuRepause'),native('MenuInput')
 local slotsExtend,slotAppend,slotSetup=native('SlotsExtend'),native('SlotAppend'),native('SlotSetup')
 local saveBegin,saveFix=native('DialogueSaveBegin'),native('DialogueSaveFix')
-local gameplay=StaticFindObject('/Script/Engine.GameplayStatics'):GetCDO()
-local widgets=StaticFindObject('/Script/UMG.WidgetBlueprintLibrary'):GetCDO()
+-- Class default objects are looked up on use: mods can start before the engine has
+-- loaded UMG, and an early lookup then stays empty for the whole session.
+local cdoCache={}
+local function cdo(path)
+ local o=cdoCache[path]
+ if o and o:IsValid()then return o end
+ local c=StaticFindObject(path)
+ o=c and c:IsValid()and c:GetCDO()or nil
+ cdoCache[path]=o
+ return o
+end
 local function log(s)print('[DialogueMenu] '..s..'\n')end
 local function valid(o)return o and o:IsValid()end
 local function prop(class,name,offset,kind)
@@ -57,6 +66,7 @@ local function extend(w)
  if not valid(w)or not w._ButtonList:Contains(0)then return end
  local id=w:GetAddress();local info=installed[id]
  if info then return info end
+ local wbl=cdo('/Script/UMG.WidgetBlueprintLibrary');if not wbl or not valid(pc)then return end -- retried next tick
  local ref=w._ButtonList:Find(1):get();local row=ref:GetParent()
  if not valid(row)or not row:IsA('/Script/UMG.VerticalBox')then return end
  local back=row:GetChildAt(row:GetChildrenCount()-1)
@@ -65,7 +75,7 @@ local function extend(w)
  back:RemoveFromParent()
  local buttons={}
  for n,label in ipairs(LABELS)do
-  local b=widgets:Create(w:GetWorld(),ref:GetClass(),pc)
+  local b=wbl:Create(w:GetWorld(),ref:GetClass(),pc)
   local slot=row:AddChildToVerticalBox(b)
   slot:SetPadding(refSlot.padding);slot:SetHorizontalAlignment(refSlot.align);slot:SetVerticalAlignment(refSlot.valign)
   b:SetText(label);b:SetSelect(false);buttons[n]=b
@@ -79,8 +89,6 @@ local function extend(w)
 end
 -- Cursor sound: the game's static PlaySE helper (WidgetCostumeGet::PlaySE ignores
 -- its instance), with the system move sound the save/load screen uses.
-local soundLib=StaticFindObject('/Script/imal.WidgetCostumeGet')
-soundLib=soundLib and soundLib:IsValid()and soundLib:GetCDO()
 local moveSE=nil
 local function learnSE(w)
  if not moveSE and valid(w)then local id=w.SE_Move:ToString();if id~=''then moveSE=id;log('Move sound '..id)end end
@@ -90,7 +98,8 @@ local function playMove()
   local cdo=StaticFindObject('/Game/Widget/System/WBP_SaveLoad.Default__WBP_SaveLoad_C')
   if valid(cdo)then learnSE(cdo)end
  end
- if soundLib and moveSE then pcall(function()soundLib:PlaySE(moveSE)end)end
+ local snd=cdo('/Script/imal.WidgetCostumeGet')
+ if snd and moveSE then pcall(function()snd:PlaySE(moveSE)end)end
 end
 local function nativeButton(w,i)
  if w._ButtonList:Contains(i)then return w._ButtonList:Find(i):get()end
@@ -198,13 +207,13 @@ local function attachQuick(w)
  local id=w:GetAddress();local info=screens[id]
  if info then return info end
  if not quickReady or #w.SlotList~=QUICK then return end
- if not valid(pc)then pc=gameplay:GetPlayerController(w:GetWorld(),0)end
- if not valid(pc)then return end -- retried next tick
+ if not valid(pc)then pc=cdo('/Script/Engine.GameplayStatics'):GetPlayerController(w:GetWorld(),0)end
+ if not valid(pc)or not cdo('/Script/UMG.WidgetBlueprintLibrary')then return end -- retried next tick
  screens[id]={widget=w} -- attempted once per screen, even if it fails below
  local first=w.SlotList[2] -- Slot 01; AUTO (index 0) lives in its own panel.
  local list=valid(first)and first:GetParent()
  if not valid(list)or not list:IsA('/Script/UMG.PanelWidget')then log('QUICK: slot list not found')return end
- local q=widgets:Create(w:GetWorld(),first:GetClass(),pc)
+ local q=cdo('/Script/UMG.WidgetBlueprintLibrary'):Create(w:GetWorld(),first:GetClass(),pc)
  if not valid(q)then log('QUICK: row not created')return end
  local wa,qa=w:GetAddress(),q:GetAddress()
  local n,detail=slotAppend(wa,qa)
@@ -373,9 +382,9 @@ LoopInGameThreadWithDelay(1,function()
   frame=frame+1
   if frame%25==1 then
    parsers=FindAllOf('CommuScriptParser')or{}
-   for _,p in ipairs(parsers)do if valid(p)and valid(p:GetWorld())then pc=gameplay:GetPlayerController(p:GetWorld(),0);break end end
+   for _,p in ipairs(parsers)do if valid(p)and valid(p:GetWorld())then pc=cdo('/Script/Engine.GameplayStatics'):GetPlayerController(p:GetWorld(),0);break end end
    if not valid(pc)then
-    for _,w in ipairs(watched)do if valid(w)then pc=gameplay:GetPlayerController(w:GetWorld(),0);break end end
+    for _,w in ipairs(watched)do if valid(w)then pc=cdo('/Script/Engine.GameplayStatics'):GetPlayerController(w:GetWorld(),0);break end end
    end
    current=nil
    for _,p in ipairs(parsers)do if valid(p)and valid(p.CommuScriptPause)then
