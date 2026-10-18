@@ -12,7 +12,7 @@
   },
   "textAutoToggle": {
     "repository": "AlphaBoom/starlit-season-text-auto-toggle",
-    "commit": "d7eca62b3dd292432cdfe4b79c142f4f39f92d6a"
+    "commit": "98a430cb9fbcbdfbeae99de959d4566f121878c4"
   },
   "zig": "0.16.0"
 }
