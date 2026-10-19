@@ -52,16 +52,7 @@
 
 如果 Steam“验证游戏文件完整性”恢复了 Steam API，DLC 解锁会显示为关闭，重新开启并应用即可。
 
-## 构建
-
-Release 由 GitHub Actions（`.github/workflows/release.yml`）在推送 `v*` 标签时构建，本地也可以运行：
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build.ps1 -Version 1.0.0
-```
-
-依赖都固定版本并校验 SHA-256（`deps.json`）：UE4SS 3.0.1-1170（镜像在本仓库的 `deps-ue4ss-3.0.1-1170` Release，
-上游 `experimental-latest` 已不再提供该文件）、SmokeAPI 4.1.3、对话自动切换仓库的固定提交、Zig 编译器（编译存读档 Mod 的原生 DLL）。
+开发相关内容见 [构建与发布说明（英文）](docs/build.md)。
 
 ---
 

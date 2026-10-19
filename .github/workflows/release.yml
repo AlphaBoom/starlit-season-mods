@@ -26,6 +26,9 @@ jobs:
         shell: pwsh
         run: |
           $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { '${{ inputs.version }}' }
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and !(Test-Path -LiteralPath ".github/releases/$version.md")) {
+            throw "Add .github/releases/$version.md with user-facing changes before publishing a release."
+          }
           powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 -Version $version
           "VERSION=$version" >> $env:GITHUB_ENV
 
@@ -41,10 +44,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $zip = Get-Item dist/*.zip
-          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
-          $notes = @"
-          解压到游戏根目录（有 StarlitSeason.exe 的文件夹），然后双击 StarlitMods.exe。详见 README。
-
-          SHA-256: ``$hash``
-          "@
-          gh release create $env:GITHUB_REF_NAME $zip --title "StarlitSeasonMods $env:VERSION" --notes $notes
+          $notesPath = ".github/releases/$env:VERSION.md"
+          gh release create $env:GITHUB_REF_NAME $zip.FullName --title "StarlitSeasonMods $env:VERSION" --notes-file $notesPath
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed.' }

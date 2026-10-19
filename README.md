@@ -58,18 +58,7 @@ To update, extract the new zip over the old one. If DLC unlock is on, open `Star
 
 If Steam's "Verify integrity of game files" restores the Steam API, DLC unlock shows as off; turn it on and apply again.
 
-## Build
-
-GitHub Actions (`.github/workflows/release.yml`) builds and publishes the release when a `v*` tag is pushed.
-To build locally:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build.ps1 -Version 1.0.0
-```
-
-All dependencies are pinned and checked by SHA-256 in `deps.json`: UE4SS 3.0.1-1170 (mirrored in this repository's
-`deps-ue4ss-3.0.1-1170` release, since upstream `experimental-latest` no longer has it), SmokeAPI 4.1.3,
-a pinned commit of the dialogue toggle repository, and the Zig compiler (builds the save / load mod's native DLL).
+For development, see the [build and release guide](docs/build.md).
 
 ---
 
