@@ -10,6 +10,7 @@ For **Windows / Steam version 1.61**.
 | --- | --- |
 | Dialogue auto / manual toggle | Press gamepad Y / Triangle or keyboard A in a dialogue to switch auto-advance; the state shows in the game's own guide bar. Maintained in [its own repository](https://github.com/AlphaBoom/starlit-season-text-auto-toggle). |
 | Save / load enhancement | SAVE / LOAD in the dialogue menu, a separate QUICK save slot under AUTO, F5 quick save and F6 quick load. See [details](mods/DialogueMenu/README.md). |
+| Stuck voice fix (experimental, off by default) | Replays a dialogue voice that silently never starts and stalls auto-advance; skips it if that fails. See [details](mods/VoiceWatchdog/README.md). |
 | DLC unlock (off by default) | Uses [SmokeAPI](https://github.com/acidicoala/SmokeAPI) 4.1.3. Turn it on in the manager. |
 
 ## Features

@@ -79,6 +79,9 @@ Get-ChildItem -LiteralPath (Join-Path $auto 'mod\ue4ss') -Recurse -File | ForEac
 Add-File (Join-Path $repo 'mods\DialogueMenu\Scripts\main.lua') "$bin/ue4ss/Mods/DialogueMenu/Scripts/main.lua"
 Add-File (Join-Path $repo 'mods\DialogueMenu\README.md') "$bin/ue4ss/Mods/DialogueMenu/README.md"
 Add-File $nativeDll "$bin/ue4ss/Mods/DialogueMenu/DialogueMenu.dll"
+foreach ($name in @('Scripts/main.lua', 'durations.tsv', 'README.md')) {
+    Add-File (Join-Path $repo "mods/VoiceWatchdog/$name") "$bin/ue4ss/Mods/VoiceWatchdog/$name"
+}
 
 $manifestFiles = @()
 foreach ($rel in $files.Keys) {
