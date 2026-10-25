@@ -1,3 +1,2 @@
 TextAutoToggle : 1
 DialogueMenu : 1
-VoiceWatchdog : 0

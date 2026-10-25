@@ -10,7 +10,6 @@
 | --- | --- |
 | 对话自动 / 手动切换 | 对话中按 手柄 Y / △ 或键盘 A 切换自动播放，状态显示在原生提示栏。由 [独立仓库](https://github.com/AlphaBoom/starlit-season-text-auto-toggle) 维护。 |
 | 对话存读档增强 | 对话菜单增加 SAVE / LOAD；独立的 QUICK 存档位（AUTO 下方）；F5 快存、F6 快读。详见 [说明](mods/DialogueMenu/README.md)。 |
-| 语音卡住修复（实验性，默认关闭） | 对话语音偶发无声、自动推进停住时重新播放该句，仍不行则跳过。详见 [说明](mods/VoiceWatchdog/README.md)。 |
 | DLC 解锁（默认关闭） | 使用 [SmokeAPI](https://github.com/acidicoala/SmokeAPI) 4.1.3，需要在管理器中手动开启。 |
 
 ## 功能一览
