@@ -1,29 +1,32 @@
-# Choice result hints / 选项结果提示
+# Choice result hints (ChoiceHints)
 
-Optional dialogue spoilers for Starlit Season Steam v1.61 and UE4SS.
+Windows Steam v1.61 only, loaded by UE4SS 3.0.1-1170. Off by default; turn it on in the manager, or set
+`ChoiceHints : 1` in `ue4ss/Mods/mods.txt` and restart the game.
 
-When the visible choices lead to different confirmed evaluations, the mod adds a second line such as
-`[PERFECT]`, `[GOOD]`, `[NORMAL]` or `[BAD]` under each choice. It matches the localized choice text,
-so shuffled button positions do not change the association. The timer, input and actual results remain native.
+## Features
 
-默认关闭。在管理器中开启“选项结果提示”，或将 `ue4ss/Mods/mods.txt` 中的 `ChoiceHints : 0` 改为
-`ChoiceHints : 1`，重启游戏生效。本机开发环境单独保持 `ChoiceHints : 1`；发布配置始终为 0。
+- When the choices on screen lead to different evaluations, each choice gets a coloured label
+  (**PERFECT** / **GOOD** / **NORMAL** / **BAD**) on the top edge of its plate.
+- The label is a separate widget on the choice plate; the choice text, its wrapping and the plate layout are not
+  changed, so long choices do not overlap.
+- Labels follow the matching text, so they stay correct when the game shuffles the choice positions.
+- The labels never take input; the timer, the selection and the result stay native.
 
 ## Coverage
 
-Reads the currently loaded `MD_CommuScript` and localization tables. Follows `selectButton` / `select`,
-`if` / `elseIf` / `else` / `endIf` and label jumps until the native `uiResult` command.
-Only conditions on the current `select` value with `==` / `!=` are resolved. Unknown conditions,
-missing labels, cycles, ambiguous text, incomplete groups, identical evaluations and further choices suppress hints.
-This version previews the game's explicit evaluation, not arbitrary plot consequences, hidden flags or exact rewards.
-No script rows, variables, choices or save data are changed. Text is restored when the selection ends.
+Only evaluations the script makes certain are shown. The mod reads the dialogue's loaded `MD_CommuScript` table and
+its localization tables and follows `selectButton` / `select`, `if` / `elseIf` / `else` / `endIf` and label jumps up
+to the native `uiResult` command. Only conditions on the current `select` value with `==` / `!=` are resolved.
 
-`Scripts/analyze.lua` is a pure analyzer; `Scripts/main.lua` applies the display on the game thread.
-Log: `ue4ss/UE4SS.log`, search `[ChoiceHints]`.
+Nothing is shown when a condition is unknown, a label is missing, the branches loop, a further choice comes first,
+all choices give the same evaluation, or the on-screen text cannot be matched to one choice unambiguously.
+It previews the game's explicit evaluation only, not other plot consequences, hidden flags or exact rewards.
+No script rows, variables, choices or save data are changed; the labels are removed when the choice closes.
 
-## Verification
+## Implementation
 
-Tested in game with `CM_idolchr_0101_A_04_00`: the three randomized choices show their actual PERFECT / GOOD /
-NORMAL evaluations. The script's label branches and final `uiResult` commands agree with those annotations.
-The analyzer tests cover divergent and identical results, unknown conditions, missing targets, cycles,
-localized/shuffled choices and ambiguity.
+- `Scripts/analyze.lua`: pure script analysis (choice groups, branch resolution, text matching).
+- `Scripts/main.lua`: finds the active choice widget on a game-thread timer and adds or removes the labels.
+- Log: `ue4ss/UE4SS.log`, lines starting with `[ChoiceHints]`.
+- Tests: `tests/choice-hints.lua` (run from the repository root with Lua 5.4) covers differing and equal results,
+  unknown conditions, missing targets, cycles, shuffled localized choices and ambiguous text.

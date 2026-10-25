@@ -7,12 +7,49 @@ local function str(v)return type(v)=='string'and v or v:ToString()end
 local function unbox(v)local ok,x=pcall(function()return v:get()end);return ok and x or v end
 local function log(s)print('[ChoiceHints] '..s..'\n')end
 RegisterCustomProperty({Name='CHActive',Type=PropertyTypes.ByteProperty,BelongsToClass='/Script/imal.CommuScriptSelect',OffsetInternal=0x230})
-local changed={}
+-- Each hint is a separate label on the choice plate, so the choice text and its layout
+-- stay untouched however long the text is.
+local COLORS={PERFECT={1,0.82,0.25},GOOD={0.5,0.92,0.55},NORMAL={0.62,0.82,1},BAD={1,0.45,0.45}}
+local badges={}
+local textBlock
 local function restore()
- for _,e in ipairs(changed)do
-  if valid(e.widget)and e.widget:GetText():ToString()==e.decorated then e.widget:SetText(FText(e.original))end
+ for _,b in ipairs(badges)do if valid(b)then b:RemoveFromParent()end end
+ badges={}
+end
+local function badge(owner,text,result)
+ local plate=text:GetParent();plate=valid(plate)and plate:GetParent()
+ if not(valid(plate)and plate:IsA('/Script/UMG.CanvasPanel'))then error('choice plate not found')end
+ textBlock=valid(textBlock)and textBlock or StaticFindObject('/Script/UMG.TextBlock')
+ local b=StaticConstructObject(textBlock,owner.WidgetTree)
+ b:SetFont(text.Font)
+ local font=b.Font;font.Size=math.max(12,math.floor(font.Size*0.85));b:SetFont(font)
+ local c=COLORS[result]
+ b:SetColorAndOpacity({SpecifiedColor={R=c[1],G=c[2],B=c[3],A=1},ColorUseRule=0})
+ b:SetShadowOffset({X=1.5,Y=1.5});b:SetShadowColorAndOpacity({R=0,G=0,B=0,A=0.85})
+ b:SetText(FText(result))
+ b:SetVisibility(3) -- HitTestInvisible: never takes a click from the choice button
+ -- Sit on the top edge of the visible plate image (normal_plate_NN), which is smaller
+ -- than its canvas; fall back to the canvas top if the plate image is not found.
+ local anchorX,anchorY,x,y=0.5,0,0,-2
+ local id=text:GetFName():ToString():match('(%d+)$')
+ for i=0,plate:GetChildrenCount()-1 do
+  local c=plate:GetChildAt(i)
+  if c:GetFName():ToString()=='normal_plate_'..id then
+   local cs=c.Slot;local a=cs:GetAnchors();local al=cs:GetAlignment();local p=cs:GetPosition();local sz=cs:GetSize()
+   if a.Minimum.X==a.Maximum.X and a.Minimum.Y==a.Maximum.Y then
+    anchorX,anchorY=a.Minimum.X,a.Minimum.Y
+    x=p.X+(0.5-al.X)*sz.X;y=p.Y-al.Y*sz.Y+4
+   end
+   break
+  end
  end
- changed={}
+ local slot=plate:AddChildToCanvas(b)
+ slot:SetAutoSize(true);slot:SetZOrder(100)
+ local anchors=slot:GetAnchors();anchors.Minimum.X=anchorX;anchors.Maximum.X=anchorX;anchors.Minimum.Y=anchorY;anchors.Maximum.Y=anchorY
+ local align=slot:GetAlignment();align.X=0.5;align.Y=1
+ local pos=slot:GetPosition();pos.X=x;pos.Y=y
+ slot:SetAnchors(anchors);slot:SetAlignment(align);slot:SetPosition(pos)
+ badges[#badges+1]=b
 end
 local function walk(x,out)
  if not valid(x)then return end
@@ -76,20 +113,12 @@ local function tick()
  if not cache then return end
  local widgets,visible,texts={},{},{}
  walk(w,widgets)
- for _,t in ipairs(widgets)do if shown(t)then
-  local text=t:GetText():ToString()
-  for _,e in ipairs(changed)do if e.widget:GetAddress()==t:GetAddress()and text==e.decorated then text=e.original;break end end
-  visible[#visible+1]=t;texts[#texts+1]=text
- end end
+ for _,t in ipairs(widgets)do if shown(t)then visible[#visible+1]=t;texts[#texts+1]=t:GetText():ToString()end end
  local signature=key..table.concat(texts,'|')
  if signature==lastSignature then return end
  restore();lastSignature=signature
  local results=analyze.match(cache,texts);if not results then return end
- for i,t in ipairs(visible)do
-  local decorated=texts[i]..'\n['..results[i]..']'
-  t:SetText(FText(decorated))
-  changed[#changed+1]={widget=t,original=texts[i],decorated=decorated}
- end
+ for i,t in ipairs(visible)do badge(w,t,results[i])end
  log('Showing '..table.concat(results,' / '))
 end
 LoopInGameThreadWithDelay(50,function()

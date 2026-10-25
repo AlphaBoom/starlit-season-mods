@@ -10,6 +10,7 @@ For **Windows / Steam version 1.61**.
 | --- | --- |
 | Dialogue auto / manual toggle | Press gamepad Y / Triangle or keyboard A in a dialogue to switch auto-advance; the state shows in the game's own guide bar. Maintained in [its own repository](https://github.com/AlphaBoom/starlit-season-text-auto-toggle). |
 | Save / load enhancement | SAVE / LOAD in the dialogue menu, a separate QUICK save slot under AUTO, F5 quick save and F6 quick load. See [details](mods/DialogueMenu/README.md). |
+| Choice result hints (off by default) | When dialogue choices lead to different evaluations, marks each choice with PERFECT / GOOD / NORMAL / BAD. See [details](mods/ChoiceHints/README.md). |
 | DLC unlock (off by default) | Uses [SmokeAPI](https://github.com/acidicoala/SmokeAPI) 4.1.3. Turn it on in the manager. |
 
 ## Features
@@ -30,6 +31,14 @@ game's SYSTEM menu offers saving. QUICK also appears on the title screen's LOAD 
 (keyboard shown below).
 
 ![A AUTO ON in the guide bar](docs/images/auto-keyboard.jpg)
+
+**Choice result hints (off by default).** When the choices lead to different evaluations, a coloured label above
+each choice shows the evaluation it gives. The label is separate from the choice text, so the layout stays as it
+is, and it follows the right choice when the game shuffles their positions. Only evaluations the script makes
+certain are shown; unknown conditions, equal results or text that cannot be matched uniquely show nothing.
+Turn it on in the manager.
+
+![Evaluation labels above the choices](docs/images/choice-hints.jpg)
 
 **Mod manager.** Click a card to switch a mod, press Apply; "Uninstall all" restores the original game.
 The button at the top right switches between English and Chinese.
@@ -64,7 +73,3 @@ For development, see the [build and release guide](docs/build.md).
 
 Code in this repository is [MIT licensed](LICENSE). UE4SS is MIT licensed and SmokeAPI uses The Unlicense; their
 license files ship in `StarlitModsData/licenses`. Game content belongs to its rights holders.
-
-### Choice result hints (optional, off by default)
-
-Enable **Choice result hints** in the manager to preview differing native PERFECT / GOOD / NORMAL / BAD evaluations under dialogue choices. Unsupported or ambiguous branches are left unmarked. See [coverage and configuration](mods/ChoiceHints/README.md).

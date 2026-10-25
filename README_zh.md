@@ -10,6 +10,7 @@
 | --- | --- |
 | 对话自动 / 手动切换 | 对话中按 手柄 Y / △ 或键盘 A 切换自动播放，状态显示在原生提示栏。由 [独立仓库](https://github.com/AlphaBoom/starlit-season-text-auto-toggle) 维护。 |
 | 对话存读档增强 | 对话菜单增加 SAVE / LOAD；独立的 QUICK 存档位（AUTO 下方）；F5 快存、F6 快读。详见 [说明](mods/DialogueMenu/README.md)。 |
+| 选项结果提示（默认关闭） | 对话选项通向不同评价时，在选项上方标出 PERFECT / GOOD / NORMAL / BAD。详见 [说明](mods/ChoiceHints/README.md)。 |
 | DLC 解锁（默认关闭） | 使用 [SmokeAPI](https://github.com/acidicoala/SmokeAPI) 4.1.3，需要在管理器中手动开启。 |
 
 ## 功能一览
@@ -28,6 +29,12 @@
 **对话自动 / 手动切换。** 键盘 A、手柄 Y / △ 切换，提示栏的图标跟随当前使用的设备（下图为键盘）。
 
 ![提示栏中的 A AUTO ON](docs/images/auto-keyboard.jpg)
+
+**选项结果提示（默认关闭）。** 选项会带来不同评价时，每个选项上方显示一个彩色标签，标明选它得到的评价。
+标签独立于选项文字，不改动原有布局；选项位置随机排列时也跟着正确的选项。只显示脚本里能确定的评价，
+条件未知、各选项结果相同或文字无法唯一对应时不显示。在管理器中开启。
+
+![选项上方的评价标签](docs/images/choice-hints.jpg)
 
 **Mod 管理器。** 点卡片切换开关，点「应用」生效；「卸载全部 Mod」恢复原版。右上角可切换中文 / English。
 
@@ -58,7 +65,3 @@
 
 本仓库代码采用 [MIT 许可](LICENSE)。UE4SS 为 MIT 许可，SmokeAPI 为 Unlicense，许可文件随包附在 `StarlitModsData/licenses`。
 游戏内容版权归游戏权利人所有。
-
-### 选项结果提示（可选，默认关闭）
-
-在管理器中开启“选项结果提示”，有不同评价的对话选项会显示 PERFECT / GOOD / NORMAL / BAD。当前仅预览脚本中可确认的评价；未知条件、结果相同或匹配有歧义时不显示。详见[支持范围与配置](mods/ChoiceHints/README.md)。

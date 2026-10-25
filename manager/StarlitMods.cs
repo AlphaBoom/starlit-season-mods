@@ -241,7 +241,7 @@ namespace StarlitMods {
    options[2].Title = L.T("DLC 解锁", "DLC unlock");
    options[2].Detail = L.T("SmokeAPI 4.1.3 · 默认关闭 · 关闭时恢复游戏原有的 Steam API", "SmokeAPI 4.1.3 · off by default · turning it off restores the game's Steam API");
    options[3].Title = L.T("选项结果提示", "Choice result hints");
-   options[3].Detail = L.T("默认关闭 · 有不同评价时，在选项下显示 PERFECT / GOOD / NORMAL 等结果", "Off by default · shows differing PERFECT / GOOD / NORMAL evaluations under choices");
+   options[3].Detail = L.T("默认关闭 · 选项评价不同时，在选项上方标出 PERFECT / GOOD / NORMAL 等", "Off by default · labels choices with differing PERFECT / GOOD / NORMAL evaluations");
    commands[0].Text = L.T("应用", "Apply");
    commands[1].Text = L.T("卸载全部 Mod", "Uninstall all");
    commands[2].Text = L.T("打开游戏目录", "Game folder");

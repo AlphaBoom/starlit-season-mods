@@ -30,6 +30,9 @@ Use the version you intend to build. The package is written to
 
 ## Publish a release
 
+Only the maintainer decides when to release; agents must not tag or publish on their own
+(see [AGENTS.md](../AGENTS.md)).
+
 1. Write the version's changes in `.github/releases/<version>.md`.
 2. Commit and push the intended changes, including any dependency updates and the
    release notes.
