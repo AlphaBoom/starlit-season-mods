@@ -78,6 +78,9 @@ Get-ChildItem -LiteralPath (Join-Path $auto 'mod\ue4ss') -Recurse -File | ForEac
 }
 Add-File (Join-Path $repo 'mods\DialogueMenu\Scripts\main.lua') "$bin/ue4ss/Mods/DialogueMenu/Scripts/main.lua"
 Add-File (Join-Path $repo 'mods\DialogueMenu\README.md') "$bin/ue4ss/Mods/DialogueMenu/README.md"
+foreach ($rel in @('Scripts/main.lua', 'Scripts/analyze.lua', 'README.md')) {
+    Add-File (Join-Path $repo "mods/ChoiceHints/$rel") "$bin/ue4ss/Mods/ChoiceHints/$rel"
+}
 Add-File $nativeDll "$bin/ue4ss/Mods/DialogueMenu/DialogueMenu.dll"
 
 $manifestFiles = @()

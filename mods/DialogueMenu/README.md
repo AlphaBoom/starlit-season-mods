@@ -21,6 +21,9 @@ Windows Steam v1.61 only, loaded by UE4SS 3.0.1-1170.
   Outside a dialogue, F5 / F6 call the scene's own SYSTEM button (`OnClickedSystem` / `OnClickSystem`), choose
   セーブ / ロード in the SYSTEM menu (`OnClickedCursor`), pick QUICK, and close the menu with its `OnCancel`.
   All Unreal calls run on one game-thread timer or in hooks.
+  The added pause buttons register their HitAreaWidget with an independent native HitAreaChecker and handle
+  hover/click callbacks on the game thread. This binds the dynamically created buttons without dispatching
+  the original pause menu's Skip/Back actions or depending on controller mouse-key polling.
 - `native/dialogue-menu-native.c` → `DialogueMenu.dll`:
   - opens the game's save / load screen over a dialogue and pauses / resumes the dialogue, restoring its pause state
     and input mode when that screen closes;

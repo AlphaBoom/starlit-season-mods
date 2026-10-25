@@ -36,7 +36,9 @@ log(quickReady and 'Quick slot registered' or 'Quick slot unavailable')
 local frame,parsers,pc=0,{},nil
 local session,pending,current,lastError=nil,nil,nil,nil
 local installed={}
-local sel,from=nil,nil -- selected mod button (1 SAVE, 2 LOAD) and native cursor it was entered from
+local mouseTargets={}
+local mouseChecker=nil
+local sel=nil -- selected mod button (1 SAVE, 2 LOAD)
 local lastSave,lastLoad=false,false
 local keys={save={KeyName=FName('F5')},load={KeyName=FName('F6')}}
 local function pressed(k)return valid(pc)and pc:IsInputKeyDown(k)end
@@ -58,9 +60,34 @@ local function layout(info,ref,padding)
  if not h or h<=0 then h=62 end
  info.row:SetRenderTranslation({X=0,Y=-(h+padding.Top+padding.Bottom)})
 end
-local function hitArea(b)
- if valid(b.HitArea)then return b.HitArea end
- local h=b.HitAreaWidget;if valid(h)then return h end
+local function findNamed(o,name,class)
+ local found
+ local function walk(x)
+  if found or not valid(x)then return end
+  if(name and x:GetFName():ToString()==name)or(class and x:IsA(class))then found=x return end
+  if x:IsA('/Script/UMG.UserWidget')then walk(x.WidgetTree.RootWidget)
+  elseif x:IsA('/Script/UMG.PanelWidget')then for i=0,x:GetChildrenCount()-1 do walk(x:GetChildAt(i))end end
+ end
+ walk(o);return found
+end
+-- A single independent checker binds the hit areas' native Slate delegates.
+-- Keep it for the process lifetime; it stores only weak references to hit areas.
+-- Its outer is the permanent CDO so it cannot retain a dialogue/world after travel.
+local function bindMouse(w,buttons)
+ if not valid(mouseChecker)then
+  local class=StaticFindObject('/Script/imal.HitAreaChecker')
+  mouseChecker=StaticConstructObject(class,class:GetCDO(),0,0,0x40000000) -- Internal RootSet
+ end
+ if not valid(mouseChecker)then error('Mouse checker not created')end
+ local hits={}
+ for n,b in ipairs(buttons)do
+  local h=findNamed(b,nil,'/Script/imal.HitAreaWidget')
+  if not valid(h)then error('Pause button hit area not found')end
+  mouseChecker:AddHitArea(h,n)
+  hits[n]=h:GetAddress()
+  mouseTargets[h:GetAddress()]={widget=w,index=n}
+ end
+ return hits
 end
 local function extend(w)
  if not valid(w)or not w._ButtonList:Contains(0)then return end
@@ -83,6 +110,7 @@ local function extend(w)
  local s=row:AddChildToVerticalBox(back)
  s:SetPadding(backSlot.padding);s:SetHorizontalAlignment(backSlot.align);s:SetVerticalAlignment(backSlot.valign)
  info={widget=w,buttons=buttons,row=row};installed[id]=info
+ info.hits=bindMouse(w,buttons)
  layout(info,ref,refSlot.padding)
  log('Added SAVE / LOAD to pause menu')
  return info
@@ -127,14 +155,14 @@ end
 local function move(up)
  local cursor=current.DMCursor
  if not sel then
-  if not up and cursor==1 then from=1;select(1)return true end
-  if up and cursor==2 then from=2;select(2)return true end
+  if not up and cursor==1 then select(1)return true end
+  if up and cursor==2 then select(2)return true end
   return false
  end
  if up and sel==2 then select(1)return true end
  if not up and sel==1 then select(2)return true end
- -- Leaving the mod buttons: let the game move when its cursor lands on the right neighbour.
- if(up and from==2)or(not up and from==1)then select(nil)return false end
+ -- Mouse can enter from any native cursor; leave at the visual neighbour.
+ current.DMCursor=up and 1 or 2
  restoreNative()return true
 end
 RegisterHook('/Script/imal.CommuScriptInput:OnPressed_Pause',function(_,kind)
@@ -153,6 +181,16 @@ RegisterHook('/Script/imal.CommuScriptInput:OnMoveAxis_Pause',function(_,kind,va
  if now<axisNext then if sel then kind:set(255)end return end
  if move(v>0)then kind:set(255);axisNext=now+0.22 end
 end)
+-- Handle events after the hit area's native callback. The independent checker
+-- has no pause-menu delegates, so these clicks cannot also trigger Skip/Back.
+for _,event in ipairs({'OnHoveredCallBack','OnClickedCallBack'})do
+ RegisterHook('/Script/imal.HitAreaWidget:'..event,function()end,function(self)
+  local t=mouseTargets[self:get():GetAddress()]
+  if not t or not menuReady()or t.widget:GetAddress()~=current:GetAddress()then return end
+  if sel~=t.index then select(t.index)end
+  if event=='OnClickedCallBack'then pending={mode=t.index-1,fromPause=true}end
+ end)
+end
 RegisterHook('/Script/imal.WidgetCommuScriptPause:OnHoveredCursor',function(self)
  if sel and current and self:get():GetAddress()==current:GetAddress()then select(nil)end
 end)
@@ -172,16 +210,6 @@ RegisterHook('/Script/imal.CommuScriptInput:OnPressed_Commu',function()end,funct
 -- Save / load screens: an independent QUICK slot row below AUTO.
 ---------------------------------------------------------------------------
 local screens={} -- WidgetSaveLoad address -> {widget, quick}
-local function findNamed(o,name,class)
- local found
- local function walk(x)
-  if found or not valid(x)then return end
-  if(name and x:GetFName():ToString()==name)or(class and x:IsA(class))then found=x return end
-  if x:IsA('/Script/UMG.UserWidget')then walk(x.WidgetTree.RootWidget)
-  elseif x:IsA('/Script/UMG.PanelWidget')then for i=0,x:GetChildrenCount()-1 do walk(x:GetChildAt(i))end end
- end
- walk(o);return found
-end
 -- QUICK row style: one of the game's own row styles (the same switch that gives
 -- AUTO its look), so textures, gradient and shape are the game's.
 local QUICK_STYLE='Clear'
@@ -393,6 +421,10 @@ LoopInGameThreadWithDelay(1,function()
    end end
    if not current then sel=nil end
    for id,info in pairs(screens)do if not valid(info.widget)then screens[id]=nil end end
+   for id,info in pairs(installed)do if not valid(info.widget)then
+    for _,hit in ipairs(info.hits or{})do mouseTargets[hit]=nil end
+    installed[id]=nil
+   end end
    local live={}
    for _,w in ipairs(watched)do if valid(w)then live[#live+1]=w end end
    watched=live
@@ -440,15 +472,6 @@ LoopInGameThreadWithDelay(1,function()
     end
     if s.quick and s.frames>30 and s.widget.DMReady~=0 then quickStep(s)end
    end
-  end
-  if menuReady()then
-   local info=installed[current:GetAddress()]
-   for i,b in ipairs(info.buttons)do if valid(b)then
-    local h=hitArea(b)
-    local hovered=b:IsHovered()or(valid(h)and h:GetOnHoveredSignal(false))
-    if hovered and sel~=i then from=current.DMCursor;select(i)end
-    if valid(h)and h:GetOnClickedSignal(true)then pending={mode=i-1,fromPause=true}end
-   end end
   end
   local save,load=pressed(keys.save),pressed(keys.load)
   if save and not lastSave then open({mode=0,quick=true})elseif load and not lastLoad then open({mode=1,quick=true})end

@@ -58,3 +58,7 @@
 
 本仓库代码采用 [MIT 许可](LICENSE)。UE4SS 为 MIT 许可，SmokeAPI 为 Unlicense，许可文件随包附在 `StarlitModsData/licenses`。
 游戏内容版权归游戏权利人所有。
+
+### 选项结果提示（可选，默认关闭）
+
+在管理器中开启“选项结果提示”，有不同评价的对话选项会显示 PERFECT / GOOD / NORMAL / BAD。当前仅预览脚本中可确认的评价；未知条件、结果相同或匹配有歧义时不显示。详见[支持范围与配置](mods/ChoiceHints/README.md)。

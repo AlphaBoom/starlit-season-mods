@@ -64,3 +64,7 @@ For development, see the [build and release guide](docs/build.md).
 
 Code in this repository is [MIT licensed](LICENSE). UE4SS is MIT licensed and SmokeAPI uses The Unlicense; their
 license files ship in `StarlitModsData/licenses`. Game content belongs to its rights holders.
+
+### Choice result hints (optional, off by default)
+
+Enable **Choice result hints** in the manager to preview differing native PERFECT / GOOD / NORMAL / BAD evaluations under dialogue choices. Unsupported or ambiguous branches are left unmarked. See [coverage and configuration](mods/ChoiceHints/README.md).

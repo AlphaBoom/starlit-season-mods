@@ -26,10 +26,10 @@ namespace StarlitMods {
   public static bool Zh = System.Globalization.CultureInfo.CurrentUICulture.Name.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
   public static string T(string zh, string en) { return Zh ? zh : en; }
  }
- public sealed class Status { public bool Auto, Dialogue, Dlc, Loader, GameMatches; }
+ public sealed class Status { public bool Auto, Dialogue, Choice, Dlc, Loader, GameMatches; }
 
  public sealed class Manager {
-  public const string AutoMod = "TextAutoToggle", DialogueMod = "DialogueMenu";
+  public const string AutoMod = "TextAutoToggle", DialogueMod = "DialogueMenu", ChoiceMod = "ChoiceHints";
   public readonly string Root, Data, Payload, Bin, SteamDir;
   public readonly Manifest Manifest;
   readonly JavaScriptSerializer json = new JavaScriptSerializer();
@@ -64,7 +64,7 @@ namespace StarlitMods {
   public Status Read() {
    var s = new Status();
    string mods = File.Exists(ModsTxt) ? File.ReadAllText(ModsTxt) : "";
-   s.Auto = Enabled(mods, AutoMod); s.Dialogue = Enabled(mods, DialogueMod);
+   s.Auto = Enabled(mods, AutoMod); s.Dialogue = Enabled(mods, DialogueMod); s.Choice = Enabled(mods, ChoiceMod);
    s.Dlc = HashIs(Api, Manifest.SmokeSha256);
    s.Loader = File.Exists(Under(Bin, "dwmapi.dll")) && File.Exists(Under(Bin, "ue4ss/UE4SS.dll"));
    s.GameMatches = HashIs(Under(Bin, "StarlitSeason-Win64-Shipping.exe"), Manifest.GameExeSha256);
@@ -73,10 +73,10 @@ namespace StarlitMods {
   static bool Enabled(string mods, string name) {
    return Regex.IsMatch(mods, @"(?m)^\s*" + name + @"\s*:\s*1\s*$");
   }
-  public static string SetMods(string text, bool auto, bool dialogue) {
-   text = Regex.Replace(text, @"(?m)^\s*(" + AutoMod + "|" + DialogueMod + @")\s*:.*(?:\r?\n|$)", "");
+  public static string SetMods(string text, bool auto, bool dialogue, bool choice = false) {
+   text = Regex.Replace(text, @"(?m)^\s*(" + AutoMod + "|" + DialogueMod + "|" + ChoiceMod + @")\s*:.*(?:\r?\n|$)", "");
    return text.TrimEnd() + (text.Trim().Length > 0 ? "\r\n" : "") +
-    AutoMod + " : " + (auto ? "1" : "0") + "\r\n" + DialogueMod + " : " + (dialogue ? "1" : "0") + "\r\n";
+    AutoMod + " : " + (auto ? "1" : "0") + "\r\n" + DialogueMod + " : " + (dialogue ? "1" : "0") + "\r\n" + ChoiceMod + " : " + (choice ? "1" : "0") + "\r\n";
   }
   void EnsureClosed() {
    if (Process.GetProcessesByName("StarlitSeason-Win64-Shipping").Length != 0)
@@ -146,13 +146,13 @@ namespace StarlitMods {
     if (rest != text) File.WriteAllText(ModsTxt, rest, new UTF8Encoding(false));
    }
   }
-  public void Apply(bool auto, bool dialogue, bool dlc) {
+  public void Apply(bool auto, bool dialogue, bool dlc, bool? choice = null) {
    EnsureClosed(); EnsureGame();
    RemoveRetired();
    Deploy();
-   File.WriteAllText(ModsTxt, SetMods(File.Exists(ModsTxt) ? File.ReadAllText(ModsTxt) : "", auto, dialogue), new UTF8Encoding(false));
+   File.WriteAllText(ModsTxt, SetMods(File.Exists(ModsTxt) ? File.ReadAllText(ModsTxt) : "", auto, dialogue, choice ?? Read().Choice), new UTF8Encoding(false));
    Dlc(dlc);
-   WriteState(json.Serialize(new { Version = Manifest.Version, Auto = auto, Dialogue = dialogue, Dlc = dlc }));
+   WriteState(json.Serialize(new { Version = Manifest.Version, Auto = auto, Dialogue = dialogue, Choice = choice ?? Read().Choice, Dlc = dlc }));
   }
   public void Uninstall() {
    EnsureClosed();
@@ -162,7 +162,7 @@ namespace StarlitMods {
     string dest = Under(Root, f.Path);
     if (f.Path.EndsWith("/mods.txt", StringComparison.OrdinalIgnoreCase)) {
      if (!File.Exists(dest)) continue;
-     string rest = Regex.Replace(File.ReadAllText(dest), @"(?m)^\s*(" + AutoMod + "|" + DialogueMod + @")\s*:.*(?:\r?\n|$)", "");
+     string rest = Regex.Replace(File.ReadAllText(dest), @"(?m)^\s*(" + AutoMod + "|" + DialogueMod + "|" + ChoiceMod + @")\s*:.*(?:\r?\n|$)", "");
      if (rest.Trim().Length == 0) File.Delete(dest); else File.WriteAllText(dest, rest, new UTF8Encoding(false));
     } else if (HashIs(dest, f.Sha256)) File.Delete(dest);
    }
@@ -197,16 +197,16 @@ namespace StarlitMods {
    manager = m;
    using (var g = CreateGraphics()) k = g.DpiX / 96f;
    AutoScaleMode = AutoScaleMode.None;
-   ClientSize = new Size(S(760), S(560));
+   ClientSize = new Size(S(760), S(658));
    FormBorderStyle = FormBorderStyle.FixedSingle; MaximizeBox = false;
    StartPosition = FormStartPosition.CenterScreen;
    DoubleBuffered = true;
    Font = new Font("Microsoft YaHei UI", 10);
    string saved = Path.Combine(manager.Data, "language.txt");
    if (File.Exists(saved)) L.Zh = File.ReadAllText(saved).Trim() == "zh";
-   options = new[] { new Option(), new Option(), new Option() };
+   options = new[] { new Option(), new Option(), new Option(), new Option() };
    commands = new[] {
-    new Command { Primary = true, Click = () => Run(() => manager.Apply(options[0].On, options[1].On, options[2].On), L.T("已应用，下次启动游戏生效。", "Applied. Takes effect the next time the game starts.")) },
+    new Command { Primary = true, Click = () => Run(() => manager.Apply(options[0].On, options[1].On, options[2].On, options[3].On), L.T("已应用，下次启动游戏生效。", "Applied. Takes effect the next time the game starts.")) },
     new Command { Click = () => {
      if (MessageBox.Show(this, L.T("卸载本包安装的全部 Mod 和加载器，并恢复原有 Steam API？\n\n存档（包括 QUICK 存档位）会保留。", "Remove every mod and the loader installed by this package, and restore the original Steam API?\n\nSaves (including the QUICK slot) are kept."), L.T("卸载 Mod", "Uninstall mods"), MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
       Run(manager.Uninstall, L.T("已卸载。可删除 StarlitMods.exe 和 StarlitModsData 文件夹；重新点“应用”可再次安装。", "Uninstalled. You can delete StarlitMods.exe and the StarlitModsData folder, or press Apply to reinstall."));
@@ -223,11 +223,11 @@ namespace StarlitMods {
     options[i].Card = R(40, 128 + i * 98, 680, 84);
     options[i].Toggle = R(40 + 680 - 24 - 64, 128 + i * 98 + 26, 64, 32);
    }
-   for (int i = 0; i < 3; i++) commands[i].Box = R(52 + i * 226, 432, 204, 50);
+   for (int i = 0; i < 3; i++) commands[i].Box = R(52 + i * 226, 530, 204, 50);
    commands[3].Box = R(640, 50, 96, 26);
    Shown += (s, e) => {
-    // First run: the two dialogue mods on; DLC unlock stays off until the user enables it.
-    if (manager.FirstRun) Run(() => manager.Apply(true, true, false), L.T("首次运行：已启用对话自动切换和存读档增强。DLC 解锁需要手动开启。", "First run: dialogue auto toggle and save / load enabled. DLC unlock is off until you turn it on."));
+    // First run: dialogue mods on; DLC unlock and choice spoilers off.
+    if (manager.FirstRun) Run(() => manager.Apply(true, true, false, false), L.T("首次运行：已启用对话自动切换和存读档增强。DLC 解锁需要手动开启。", "First run: dialogue auto toggle and save / load enabled. DLC unlock is off until you turn it on."));
     else Run(() => { }, Hint());
    };
   }
@@ -240,6 +240,8 @@ namespace StarlitMods {
    options[1].Detail = L.T("菜单增加 SAVE / LOAD · 独立 QUICK 存档位 · F5 快存 / F6 快读", "SAVE / LOAD in the dialogue menu · separate QUICK slot · F5 quick save / F6 quick load");
    options[2].Title = L.T("DLC 解锁", "DLC unlock");
    options[2].Detail = L.T("SmokeAPI 4.1.3 · 默认关闭 · 关闭时恢复游戏原有的 Steam API", "SmokeAPI 4.1.3 · off by default · turning it off restores the game's Steam API");
+   options[3].Title = L.T("选项结果提示", "Choice result hints");
+   options[3].Detail = L.T("默认关闭 · 有不同评价时，在选项下显示 PERFECT / GOOD / NORMAL 等结果", "Off by default · shows differing PERFECT / GOOD / NORMAL evaluations under choices");
    commands[0].Text = L.T("应用", "Apply");
    commands[1].Text = L.T("卸载全部 Mod", "Uninstall all");
    commands[2].Text = L.T("打开游戏目录", "Game folder");
@@ -253,7 +255,7 @@ namespace StarlitMods {
    try { work(); status = message; }
    catch (Exception ex) { status = L.T("操作未完成：", "Not completed: ") + ex.Message.Split('\n')[0]; MessageBox.Show(this, ex.Message, L.T("Mod 管理器", "Mod Manager"), MessageBoxButtons.OK, MessageBoxIcon.Warning); }
    var st = manager.Read();
-   options[0].On = st.Auto; options[1].On = st.Dialogue; options[2].On = st.Dlc;
+   options[0].On = st.Auto; options[1].On = st.Dialogue; options[2].On = st.Dlc; options[3].On = st.Choice;
    if (!st.GameMatches) status += L.T("  注意：游戏版本不是本包支持的 Steam v1.61。", "  Note: this game version is not Steam v1.61.");
    else if (!st.Loader) status += L.T("  加载器未安装：点“应用”安装。", "  Loader not installed: press Apply.");
    Invalidate();
@@ -348,11 +350,11 @@ namespace StarlitMods {
    DrawLanguage(g, commands[3]);
 
    // Help bar, like the game's bottom guide.
-   using (var b = new SolidBrush(Color.FromArgb(230, Slate))) g.FillRectangle(b, R(0, 506, 760, 54));
-   using (var b = new SolidBrush(Teal)) g.FillRectangle(b, R(0, 506, 760, 3));
+   using (var b = new SolidBrush(Color.FromArgb(230, Slate))) g.FillRectangle(b, R(0, 604, 760, 54));
+   using (var b = new SolidBrush(Teal)) g.FillRectangle(b, R(0, 604, 760, 3));
    using (var f = F(9.5f, FontStyle.Regular)) {
     var fmt = new StringFormat { LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter };
-    using (var b = new SolidBrush(Color.White)) g.DrawString(status, f, b, R(28, 509, 704, 51), fmt);
+    using (var b = new SolidBrush(Color.White)) g.DrawString(status, f, b, R(28, 607, 704, 51), fmt);
    }
   }
   void DrawOption(Graphics g, Option o) {
@@ -425,11 +427,12 @@ namespace StarlitMods {
     if (args.Length > 1 && args[0] == "--root") { root = args[1]; args = args.Skip(2).ToArray(); cli = args.Length > 0; }
     var manager = new Manager(root);
     if (!cli) { Application.Run(new ManagerForm(manager)); return 0; }
-    if (args[0] == "--apply" && args.Length == 4) manager.Apply(args[1] == "1", args[2] == "1", args[3] == "1");
+    if (args[0] == "--apply" && args.Length == 5) manager.Apply(args[1] == "1", args[2] == "1", args[3] == "1", args[4] == "1");
+    else if (args[0] == "--apply" && args.Length == 4) manager.Apply(args[1] == "1", args[2] == "1", args[3] == "1");
     else if (args[0] == "--uninstall") manager.Uninstall();
-    else if (args[0] != "--status") throw new ArgumentException("Usage: StarlitMods.exe [--root DIR] [--status | --apply AUTO DIALOGUE DLC | --uninstall]");
+    else if (args[0] != "--status") throw new ArgumentException("Usage: StarlitMods.exe [--root DIR] [--status | --apply AUTO DIALOGUE DLC [CHOICE] | --uninstall]");
     var st = manager.Read();
-    Console.WriteLine("Auto={0} Dialogue={1} Dlc={2} Loader={3} GameMatches={4}", st.Auto, st.Dialogue, st.Dlc, st.Loader, st.GameMatches);
+    Console.WriteLine("Auto={0} Dialogue={1} Dlc={2} Loader={3} GameMatches={4} Choice={5}", st.Auto, st.Dialogue, st.Dlc, st.Loader, st.GameMatches, st.Choice);
     return 0;
    } catch (Exception ex) {
     if (cli) Console.Error.WriteLine(ex.Message); else MessageBox.Show(ex.Message, L.T("Mod 管理器", "Mod Manager"), MessageBoxButtons.OK, MessageBoxIcon.Error);
